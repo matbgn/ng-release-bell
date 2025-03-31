@@ -22,7 +22,9 @@
       "loginRedirectUri": "/api/v1/callback"
     },
     "mysql": {},
-    "sendmail": {},
+    "sendmail": {
+      "supportsDisplayName": true
+    },
     "localstorage": {}
   },
   "mediaLinks": [

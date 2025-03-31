@@ -272,7 +272,7 @@ async function sendNotificationEmail(release) {
     const settingsLink = process.env.CLOUDRON_APP_ORIGIN || '';
 
     const mail = {
-        from: `ReleaseBell <${process.env.CLOUDRON_MAIL_FROM}>`,
+        from: `${process.env.CLOUDRON_MAIL_FROM_DISPLAY_NAME ? process.env.CLOUDRON_MAIL_FROM_DISPLAY_NAME : 'ReleaseBell'} <${process.env.CLOUDRON_MAIL_FROM}>`,
         to: user.email,
         subject: `${project.name} ${release.version}${release.prerelease ? ' (prerelease)' : ''} released`,
         text: `A new ${release.prerelease ? 'prerelease' : 'release'} at ${project.name} with version ${release.version} was published. ${release.body}. Read more about this release at ${versionLink}`,
