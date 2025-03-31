@@ -11,7 +11,7 @@ if [[ ! -f /app/data/session.secret ]]; then
     dd if=/dev/urandom bs=256 count=1 2>/dev/null | base64 > /app/data/session.secret
 fi
 
-echo "=> Create database.json"
+echo "==> Create database.json"
 cat <<EOF > /run/database.json
 {
     "defaultEnv": "cloudron",
@@ -27,8 +27,8 @@ cat <<EOF > /run/database.json
 }
 EOF
 
-echo "=> Run db-migration"
+echo "==> Run db-migration"
 gosu cloudron:cloudron /app/code/node_modules/.bin/db-migrate up
 
-echo "=> Start application"
+echo "==> Start Releasebell"
 exec /usr/local/bin/gosu cloudron:cloudron node /app/code/index.js
