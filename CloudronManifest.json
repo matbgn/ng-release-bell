@@ -36,5 +36,5 @@
   "forumUrl": "https://forum.cloudron.io/category/55/release-bell",
   "changelog": "file://CHANGELOG",
   "minBoxVersion": "7.5.1",
-  "documentationUrl": "https://docs.cloudron.io/apps/releasebell/"
+  "documentationUrl": "https://docs.cloudron.io/packages/releasebell/"
 }
