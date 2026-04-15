@@ -7,7 +7,7 @@
 require('chromedriver');
 
 const execSync = require('child_process').execSync,
-    expect = require('expect.js'),
+    assert = require('node:assert/strict'),
     fs = require('fs'),
     path = require('path'),
     { Builder, By, until } = require('selenium-webdriver'),
@@ -40,7 +40,7 @@ describe('Application life cycle test', function () {
 
         const currentUrl = await browser.getCurrentUrl();
         if (!currentUrl.includes(app.domain)) return;
-        expect(this.currentTest.title).to.be.a('string');
+        assert.strictEqual(typeof this.currentTest.title, 'string');
 
         const screenshotData = await browser.takeScreenshot();
         fs.writeFileSync(`./screenshots/${new Date().getTime()}-${this.currentTest.title.replaceAll(' ', '_')}.png`, screenshotData, 'base64');
@@ -109,7 +109,7 @@ describe('Application life cycle test', function () {
     function getAppInfo() {
         const inspect = JSON.parse(execSync('cloudron inspect'));
         app = inspect.apps.filter(function (a) { return a.location.indexOf(LOCATION) === 0; })[0];
-        expect(app).to.be.an('object');
+        assert.ok(app && typeof app === 'object');
     }
 
     xit('build app', function () { execSync('cloudron build', EXEC_ARGS); });
@@ -149,7 +149,7 @@ describe('Application life cycle test', function () {
         execSync('cloudron configure --location ' + LOCATION + '2 --app ' + app.id, EXEC_ARGS);
         var inspect = JSON.parse(execSync('cloudron inspect'));
         app = inspect.apps.filter(function (a) { return a.location === LOCATION + '2'; })[0];
-        expect(app).to.be.an('object');
+        assert.ok(app && typeof app === 'object');
     });
 
     it('can login', login.bind(null, true /* hasSession */));
@@ -173,7 +173,7 @@ describe('Application life cycle test', function () {
         execSync('cloudron update --app ' + app.id, EXEC_ARGS);
         var inspect = JSON.parse(execSync('cloudron inspect'));
         app = inspect.apps.filter(function (a) { return a.location === LOCATION; })[0];
-        expect(app).to.be.an('object');
+        assert.ok(app && typeof app === 'object');
     });
 
     it('can login', login.bind(null, true /* hasSession */));
