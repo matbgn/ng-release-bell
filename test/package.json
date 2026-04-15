@@ -13,8 +13,6 @@
     "selenium-server-standalone-jar": "^4.29.0",
     "selenium-webdriver": "^4.30.0"
   },
-  "dependencies": {
-    "chromedriver": "^134.0.5"
-  },
+  "dependencies": {},
   "type": "module"
 }
