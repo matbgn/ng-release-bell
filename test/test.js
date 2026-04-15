@@ -1,24 +1,21 @@
 #!/usr/bin/env node
 
+import 'chromedriver';
+import { execSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { Builder, By, until } from 'selenium-webdriver';
+import { Options } from 'selenium-webdriver/chrome';
+
 /* global it, xit, describe, before, afterEach */
-
-'use strict';
-
-require('chromedriver');
-
-const execSync = require('child_process').execSync,
-    assert = require('node:assert/strict'),
-    fs = require('fs'),
-    path = require('path'),
-    { Builder, By, until } = require('selenium-webdriver'),
-    { Options } = require('selenium-webdriver/chrome');
 
 describe('Application life cycle test', function () {
     this.timeout(0);
 
     const LOCATION = process.env.LOCATION || 'test';
     const TEST_TIMEOUT = 10000;
-    const EXEC_ARGS = { cwd: path.resolve(__dirname, '..'), stdio: 'inherit' };
+    const EXEC_ARGS = { cwd: path.resolve(import.meta.dirname, '..'), stdio: 'inherit' };
 
     const USERNAME = process.env.USERNAME;
     const PASSWORD = process.env.PASSWORD;
