@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { app, clearCache, click, cloudronCli, execSync, goto, loginOIDC, sendKeys, setupBrowser, takeScreenshot, teardownBrowser, waitFor } from '@cloudron/charlie';
+import { app, clearCache, click, cloudronCli, execSync, goto, loginOIDC, sendKeys, setupBrowser, takeScreenshot, teardownBrowser } from '@cloudron/charlie';
 
 /* global it, describe, before, after, afterEach */
 
