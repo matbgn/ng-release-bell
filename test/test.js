@@ -15,16 +15,9 @@ describe('Application life cycle test', function () {
     });
 
     async function login() {
-        await clearCache();
         await goto(`https://${app.fqdn}`, 'css=#loginButton');
         await click('css=#loginButton');
         await loginOIDC('css=#logoutButton');
-    }
-
-    async function logout() {
-        await goto(`https://${app.fqdn}`, 'css=#logoutButton');
-        await click('css=#logoutButton');
-        await waitFor('css=#loginButton');
     }
 
     async function setGithubToken() {
@@ -54,26 +47,26 @@ describe('Application life cycle test', function () {
     it('can login', login);
     it('can set gh token', setGithubToken);
     it('can see projects', checkProjects);
-    it('can logout', logout);
+    it('can logout', clearCache);
 
     it('restart app', cloudronCli.restart);
 
     it('can login', login);
     it('can see projects', checkProjects);
-    it('can logout', logout);
+    it('can logout', clearCache);
 
     it('backup app', cloudronCli.createBackup);
     it('restore app', cloudronCli.restoreFromLatestBackup);
 
     it('can login', login);
     it('can see projects', checkProjects);
-    it('can logout', logout);
+    it('can logout', clearCache);
 
     it('move to different location', cloudronCli.changeLocation);
 
     it('can login', login);
     it('can see projects', checkProjects);
-    it('can logout', logout);
+    it('can logout', clearCache);
 
     it('uninstall app', cloudronCli.uninstall);
 
@@ -82,13 +75,13 @@ describe('Application life cycle test', function () {
 
     it('can login', login);
     it('can set gh token', setGithubToken);
-    it('can logout', logout);
+    it('can logout', clearCache);
 
     it('can update', cloudronCli.update);
 
     it('can login', login);
     it('can see projects', checkProjects);
-    it('can logout', logout);
+    it('can logout', clearCache);
 
     it('uninstall app', cloudronCli.uninstall);
 });
