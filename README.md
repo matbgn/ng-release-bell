@@ -2,6 +2,12 @@
 
 A self-hosted release notification service. Track releases across multiple providers: GitHub, GitLab, Gitea/Codeberg, NPM, PyPI, Docker Hub, Quay, GitHub Container Registry, and SourceForge.
 
+## Preview
+<img width="1433" height="698" alt="image" src="https://github.com/user-attachments/assets/d02cd998-f8af-476a-9223-29e1b7912ca0" />
+
+<img width="1280" height="1329" alt="image" src="https://github.com/user-attachments/assets/76e8bf00-c775-4c25-9005-65f6a98c7b3d" />
+
+
 ## Features
 
 - **Multi-provider support**: GitHub, GitLab, Gitea/Codeberg, NPM, PyPI, Docker Hub, Quay, GHCR, SourceForge
