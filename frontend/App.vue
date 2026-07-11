@@ -308,7 +308,7 @@ export default {
         error: '',
         githubToken: '',
         quayToken: '',
-        githubAutoImport: true,
+        githubAutoImport: false,
         exportBusy: false,
         importBusy: false,
         importResult: '',
@@ -453,10 +453,18 @@ export default {
     },
     async refresh() {
       this.refreshBusy = true;
-      const result = await superagent.get(`${API_ORIGIN}/api/v1/projects`);
+      try {
+        await superagent.post(`${API_ORIGIN}/api/v1/projects/sync-all`);
+      } catch (e) {
+        console.error('Sync all failed', e);
+      }
+      try {
+        const result = await superagent.get(`${API_ORIGIN}/api/v1/projects`);
+        this.projects = result.body.projects;
+      } catch (e) {
+        console.error('Refresh failed', e);
+      }
       this.refreshBusy = false;
-
-      this.projects = result.body.projects;
     },
     async loadProviders() {
       try {
@@ -566,7 +574,7 @@ export default {
     onShowSettingsDialog() {
       this.settingsDialog.githubToken = this.user.githubToken || '';
       this.settingsDialog.quayToken = this.quayToken || '';
-      this.settingsDialog.githubAutoImport = this.user.githubAutoImport === true || this.user.githubAutoImport === 1 || this.user.githubAutoImport === undefined;
+      this.settingsDialog.githubAutoImport = this.user.githubAutoImport === true || this.user.githubAutoImport === 1;
       this.settingsDialog.error = '';
       this.settingsDialog.visible = true;
     },
@@ -621,7 +629,7 @@ export default {
       this.settingsDialog.busy = true;
       this.settingsDialog.error = '';
 
-      const currentAutoImport = this.user.githubAutoImport === true || this.user.githubAutoImport === 1 || this.user.githubAutoImport === undefined;
+      const currentAutoImport = this.user.githubAutoImport === true || this.user.githubAutoImport === 1;
 
       try {
         const body = {};
@@ -679,8 +687,9 @@ export default {
         try {
           const data = JSON.parse(e.target.result);
           const result = await superagent.post(`${API_ORIGIN}/api/v1/data/import`).send(data);
-          this.settingsDialog.importResult = `Imported ${result.body.imported} project(s), skipped ${result.body.skipped} duplicate(s).`;
+          this.settingsDialog.importResult = `Imported ${result.body.imported} project(s), skipped ${result.body.skipped} duplicate(s). Syncing releases...`;
           await this.refresh();
+          this.settingsDialog.importResult = `Imported ${result.body.imported} project(s), skipped ${result.body.skipped} duplicate(s). Done.`;
         } catch (error) {
           this.settingsDialog.importResult = `Import failed: ${error.message}`;
           console.error('Import failed', error);

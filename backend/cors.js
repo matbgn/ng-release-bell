@@ -1,8 +1,4 @@
-/* jshint node:true */
-
 'use strict';
-
-const url = require('url');
 
 /*
  * CORS middleware
@@ -19,10 +15,13 @@ module.exports = function cors(options) {
         let requestOrigin = req.headers.origin;
         if (!requestOrigin) return next();
 
-        requestOrigin = url.parse(requestOrigin);
-        if (!requestOrigin.host) return res.status(405).send('CORS not allowed from this domain');
+        let hostname;
+        try {
+            hostname = new URL(requestOrigin).hostname;
+        } catch (e) {
+            return res.status(405).send('CORS not allowed from this domain');
+        }
 
-        const hostname = requestOrigin.host.split(':')[0]; // remove any port
         const originAllowed = origins.some(function (o) { return o === '*' || o === hostname; });
         if (!originAllowed) {
             return res.status(405).send('CORS not allowed from this domain');

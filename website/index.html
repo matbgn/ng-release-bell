@@ -4,21 +4,19 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
 
-    <meta name="description" content="Get notifications for releases of your favorite GitHub projects"/>
-    <meta name="keywords" content="GitHub,notifications,releases,tags,sibbell"/>
+    <meta name="description" content="Self-hosted multi-provider release notification service — GitHub, GitLab, Gitea, NPM, PyPI, Docker Hub, Quay, GHCR, SourceForge"/>
+    <meta name="keywords" content="GitHub,GitLab,Gitea,NPM,PyPI,Docker,Quay,GHCR,SourceForge,notifications,releases,tags,self-hosted"/>
 
     <!-- Open Graph tags -->
     <meta property="og:title" content="NG Release Bell"/>
-    <meta property="og:description" content="Get notifications for releases of your favorite GitHub projects"/>
-    <meta property="og:image" content="https://releasebell.com/img/releasebell_2.png"/>
+    <meta property="og:description" content="Self-hosted multi-provider release notification service"/>
+    <meta property="og:image" content="./img/releasebell_2.png"/>
 
     <!-- twitter card meta information -->
     <meta name="twitter:card" content="summary_large_image"/>
     <meta name="twitter:title" content="NG Release Bell"/>
-    <meta name="twitter:description" content="Get notifications for releases of your favorite GitHub projects"/>
-    <meta name="twitter:image" content="https://releasebell.com/img/releasebell_2.png" />
-    <meta name="twitter:site" content="@cloudron_io"/>
-    <meta name="twitter:creator" content="@cloudron_io"/>
+    <meta name="twitter:description" content="Self-hosted multi-provider release notification service"/>
+    <meta name="twitter:image" content="./img/releasebell_2.png" />
 
     <link rel="icon" type="image/png" href="./favicon.png">
 
@@ -29,22 +27,6 @@
     <script src="./js/vue.js"></script>
     <script src="./js/element-ui.js"></script>
 
-    <!-- Matomo -->
-    <script type="text/javascript">
-      var _paq = _paq || [];
-      /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
-      _paq.push(['trackPageView']);
-      _paq.push(['enableLinkTracking']);
-      (function() {
-        var u="//analytics.cloudron.io/";
-        _paq.push(['setTrackerUrl', u+'piwik.php']);
-        _paq.push(['setSiteId', '8']);
-        var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-        g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'piwik.js'; s.parentNode.insertBefore(g,s);
-      })();
-    </script>
-    <!-- End Matomo Code -->
-
 </head>
 <body>
 
@@ -52,22 +34,22 @@
   <el-header>
     <el-menu class="el-menu-demo" mode="horizontal">
       <el-menu-item><a href="#"><i class="el-icon-bell"></i> NG Release Bell</a></el-menu-item>
-      <el-menu-item style="float: right"><a href="https://git.cloudron.io/cloudron/releasebell" target="_blank"><img src="./img/cloudron.png" height="32px"/> <span class="hidden-md-and-down">Cloudron Project</span></a></el-menu-item>
+      <el-menu-item style="float: right"><a href="https://github.com/matbgn/ng-release-bell" target="_blank"><i class="el-icon-info"></i> <span class="hidden-md-and-down">GitHub</span></a></el-menu-item>
     </el-menu>
   </el-header>
   <el-main>
     <el-dialog title="Install" :visible.sync="installDialogVisible" center>
-      <center>NG Release Bell can be directly installed on your Cloudron through the app store or manually on your server, by following the project instructions.</center>
+      <center>NG Release Bell can be self-hosted using Docker Compose. Follow the instructions in the README to get started.</center>
       <span slot="footer" class="dialog-footer">
-        <a href="https://cloudron.io/store/io.cloudron.releasebell.html" type="primary"><el-button type="primary">Cloudron</el-button></a>
-        <a href="https://git.cloudron.io/cloudron/releasebell#release-bell"><el-button>Manual</el-button></a>
+        <a href="https://github.com/matbgn/ng-release-bell#installation" type="primary"><el-button type="primary">Docker Compose</el-button></a>
+        <a href="https://github.com/matbgn/ng-release-bell"><el-button>Manual</el-button></a>
       </span>
     </el-dialog>
 
     <div class="hero">
       <div style="text-align: center">
-        <h1>Stay on top of releases for repos you star on GitHub</h1>
-        <h2>Self-Hosted Release Notification Service</h2>
+        <h1>Stay on top of releases across all your providers</h1>
+        <h2>Self-Hosted Multi-Provider Release Notification Service</h2>
         <br/>
         <br/>
         <el-button type="primary" @click="installDialogVisible = true">Install Now</el-button>
@@ -100,22 +82,22 @@
       </center>
       <el-row type="flex" class="row-bg" justify="space-around">
         <el-card class="box-card">
-          <h4>GitHub Integration</h4>
+          <h4>Multi-Provider</h4>
           <p>
-            Just provide a GitHub token and wait for notification emails.
+            Track releases across GitHub, GitLab, Gitea/Codeberg, NPM, PyPI, Docker Hub, Quay, GHCR, and SourceForge.
           </p>
         </el-card>
         <el-card class="box-card">
           <h4>Self-Hosted</h4>
-          <p>Run on your own server. Only requires <a href="https://nodejs.org/" target="_blank">nodejs</a>, mysql and an email server.</p>
+          <p>Run on your own server. Only requires <a href="https://nodejs.org/" target="_blank">Node.js</a>, MySQL and an email server.</p>
         </el-card>
         <el-card class="box-card">
           <h4>Email Notifications</h4>
-          <p>For every new release on a starred GitHub repository, you will receive a notification email.</p>
+          <p>Receive instant, hourly, daily, or weekly email digests for new releases.</p>
         </el-card>
         <el-card class="box-card">
-          <h4>Settings per Repo</h4>
-          <p>You can enable or disable notifcations for each starred project individually.</p>
+          <h4>Per-Project Settings</h4>
+          <p>Configure email frequency, pre-release exclusion, re-release suppression, and regex version filtering per project.</p>
         </el-card>
       </el-row>
     </div>
@@ -124,12 +106,12 @@
       <p>
         NG Release Bell is licensed under the MIT license.<br/>
         <br/>
-        <a href="https://git.cloudron.io/cloudron/releasebell" target="_blank"><el-button type="primary" size="small">Source Code Repository</el-button></a>
+        <a href="https://github.com/matbgn/ng-release-bell" target="_blank"><el-button type="primary" size="small">Source Code Repository</el-button></a>
       </p>
     </div>
     <div class="footer">
       <center>
-        Copyright © <a href="https://cloudron.io" target="_blank">Cloudron</a>
+        NG Release Bell &mdash; <a href="https://github.com/matbgn/ng-release-bell" target="_blank">GitHub</a>
       </center>
     </div>
   </el-main>

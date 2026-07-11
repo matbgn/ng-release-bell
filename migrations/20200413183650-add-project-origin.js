@@ -1,11 +1,8 @@
 'use strict';
 
-exports.up = function(db, callback) {
-  db.runSql('ALTER TABLE projects ADD COLUMN origin VARCHAR(512) NOT NULL DEFAULT ""', callback);
+exports.up = function(db) {
+    const cols = db.prepare('PRAGMA table_info(projects)').all().map(c => c.name);
+    if (!cols.includes('origin')) {
+        db.exec("ALTER TABLE projects ADD COLUMN origin TEXT NOT NULL DEFAULT ''");
+    }
 };
-
-exports.down = function(db, callback) {
-    db.runSql('ALTER TABLE projects DROP COLUMN type', callback);
-};
-
-

@@ -17,8 +17,7 @@ const assert = require('assert'),
     handlebars = require('handlebars'),
     markdown = require('helper-markdown'),
     nodemailer = require('nodemailer'),
-    path = require('path'),
-    smtpTransport = require('nodemailer-smtp-transport');
+    path = require('path');
 
 handlebars.registerHelper('markdown', function(text) {
     text = markdown(text);
@@ -46,17 +45,17 @@ const PROVIDERS = {
 const REGISTRY_PROVIDERS = new Set(['npm', 'pypi', 'dockerhub', 'quay', 'ghcr', 'sourceforge']);
 const MAX_NEW_RELEASES = 50;
 
-const CAN_SEND_EMAIL = (process.env.CLOUDRON_MAIL_SMTP_SERVER && process.env.CLOUDRON_MAIL_SMTP_PORT && process.env.CLOUDRON_MAIL_FROM);
+const CAN_SEND_EMAIL = (process.env.MAIL_SMTP_SERVER && process.env.MAIL_SMTP_PORT && process.env.MAIL_FROM);
 if (CAN_SEND_EMAIL) {
-    console.log(`Can send emails. Email notifications are sent out as ${process.env.CLOUDRON_MAIL_FROM}`);
+    console.log(`Can send emails. Email notifications are sent out as ${process.env.MAIL_FROM}`);
 } else {
     console.log(`
 No email configuration found. Set the following environment variables:
-    CLOUDRON_MAIL_SMTP_SERVER
-    CLOUDRON_MAIL_SMTP_PORT
-    CLOUDRON_MAIL_SMTP_USERNAME
-    CLOUDRON_MAIL_SMTP_PASSWORD
-    CLOUDRON_MAIL_FROM
+    MAIL_SMTP_SERVER
+    MAIL_SMTP_PORT
+    MAIL_SMTP_USERNAME
+    MAIL_SMTP_PASSWORD
+    MAIL_FROM
     `);
 }
 
@@ -338,20 +337,20 @@ async function sendNotificationEmail(release, project) {
     if (!project) project = await database.projects.get(release.projectId);
     const user = await database.users.get(project.userId);
 
-    const transport = nodemailer.createTransport(smtpTransport({
-        host: process.env.CLOUDRON_MAIL_SMTP_SERVER,
-        port: process.env.CLOUDRON_MAIL_SMTP_PORT,
+    const transport = nodemailer.createTransport({
+        host: process.env.MAIL_SMTP_SERVER,
+        port: process.env.MAIL_SMTP_PORT,
         auth: {
-            user: process.env.CLOUDRON_MAIL_SMTP_USERNAME,
-            pass: process.env.CLOUDRON_MAIL_SMTP_PASSWORD
+            user: process.env.MAIL_SMTP_USERNAME,
+            pass: process.env.MAIL_SMTP_PASSWORD
         }
-    }));
+    });
 
     const versionLink = getVersionLink(project, release.version);
-    const settingsLink = process.env.CLOUDRON_APP_ORIGIN || '';
+    const settingsLink = process.env.APP_ORIGIN || '';
 
     const mail = {
-        from: `${process.env.CLOUDRON_MAIL_FROM_DISPLAY_NAME ? process.env.CLOUDRON_MAIL_FROM_DISPLAY_NAME : 'NG Release Bell'} <${process.env.CLOUDRON_MAIL_FROM}>`,
+        from: `${process.env.MAIL_FROM_DISPLAY_NAME ? process.env.MAIL_FROM_DISPLAY_NAME : 'NG Release Bell'} <${process.env.MAIL_FROM}>`,
         to: user.email,
         subject: `${project.name} ${release.version}${release.prerelease ? ' (prerelease)' : ''} released`,
         text: `A new ${release.prerelease ? 'prerelease' : 'release'} at ${project.name} with version ${release.version} was published. ${release.body}. Read more about this release at ${versionLink}`,
@@ -372,7 +371,7 @@ async function sendDigestEmail(user, project, releases) {
         return;
     }
 
-    const settingsLink = process.env.CLOUDRON_APP_ORIGIN || '';
+    const settingsLink = process.env.APP_ORIGIN || '';
 
     const releaseData = releases.map(function (release) {
         return {
@@ -383,17 +382,17 @@ async function sendDigestEmail(user, project, releases) {
         };
     });
 
-    const transport = nodemailer.createTransport(smtpTransport({
-        host: process.env.CLOUDRON_MAIL_SMTP_SERVER,
-        port: process.env.CLOUDRON_MAIL_SMTP_PORT,
+    const transport = nodemailer.createTransport({
+        host: process.env.MAIL_SMTP_SERVER,
+        port: process.env.MAIL_SMTP_PORT,
         auth: {
-            user: process.env.CLOUDRON_MAIL_SMTP_USERNAME,
-            pass: process.env.CLOUDRON_MAIL_SMTP_PASSWORD
+            user: process.env.MAIL_SMTP_USERNAME,
+            pass: process.env.MAIL_SMTP_PASSWORD
         }
-    }));
+    });
 
     const mail = {
-        from: `${process.env.CLOUDRON_MAIL_FROM_DISPLAY_NAME ? process.env.CLOUDRON_MAIL_FROM_DISPLAY_NAME : 'NG Release Bell'} <${process.env.CLOUDRON_MAIL_FROM}>`,
+        from: `${process.env.MAIL_FROM_DISPLAY_NAME ? process.env.MAIL_FROM_DISPLAY_NAME : 'NG Release Bell'} <${process.env.MAIL_FROM}>`,
         to: user.email,
         subject: `NG Release Bell digest: ${releases.length} new release(s) for ${project.name}`,
         text: `New releases for ${project.name}: ${releaseData.map(r => r.version).join(', ')}`,

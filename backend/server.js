@@ -14,14 +14,13 @@ module.exports = exports = {
     start: start
 };
 
-const baseDir = process.env.CLOUDRON ? '/app/data' : path.join(__dirname, '../.dev');
+const baseDir = process.env.DATA_DIR || path.join(__dirname, '../.dev');
 
 function start(port, callback) {
     assert.strictEqual(typeof port, 'number');
     assert.strictEqual(typeof callback, 'function');
 
     var router = express.Router();
-    router.del = router.delete;
 
     var app = express();
 
@@ -35,8 +34,9 @@ function start(port, callback) {
     router.get ('/api/v1/projects/:projectId', routes.auth, routes.projects.get);
     router.get ('/api/v1/projects/:projectId/releases', routes.auth, routes.projects.releases);
     router.post('/api/v1/projects/:projectId/sync', routes.auth, routes.projects.sync);
+    router.post('/api/v1/projects/sync-all', routes.auth, routes.projects.syncAll);
     router.post('/api/v1/projects/:projectId', routes.auth, routes.projects.update);
-    router.del ('/api/v1/projects/:projectId', routes.auth, routes.projects.del);
+    router.delete ('/api/v1/projects/:projectId', routes.auth, routes.projects.del);
     router.get ('/api/v1/data/export', routes.auth, routes.data.export);
     router.post('/api/v1/data/import', routes.auth, routes.data.import);
 
@@ -48,12 +48,13 @@ function start(port, callback) {
     app.use(connectTimeout(20000, { respond: true }));
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
-    if (process.env.CLOUDRON_OIDC_ISSUER) {
+
+    if (process.env.OIDC_ISSUER) {
         app.use(oidc.auth({
-            issuerBaseURL: process.env.CLOUDRON_OIDC_ISSUER,
-            baseURL: process.env.CLOUDRON_APP_ORIGIN,
-            clientID: process.env.CLOUDRON_OIDC_CLIENT_ID,
-            clientSecret: process.env.CLOUDRON_OIDC_CLIENT_SECRET,
+            issuerBaseURL: process.env.OIDC_ISSUER,
+            baseURL: process.env.APP_ORIGIN,
+            clientID: process.env.OIDC_CLIENT_ID,
+            clientSecret: process.env.OIDC_CLIENT_SECRET,
             secret: fs.readFileSync(path.resolve(__dirname, `${baseDir}/session.secret`), 'utf8'),
             authorizationParams: {
                 response_type: 'code',
@@ -77,12 +78,12 @@ function start(port, callback) {
             req.oidc = {
                 user: {
                     sub: 'admin',
-                    family_name: 'Cloudron',
+                    family_name: 'Admin',
                     given_name: 'Admin',
                     locale: 'en-US',
-                    name: 'Cloudron Admin',
+                    name: 'Admin',
                     preferred_username: 'admin',
-                    email: 'admin@cloudron.local',
+                    email: 'admin@ngreleasebell.local',
                     email_verified: true
                 },
                 isAuthenticated() {
@@ -94,7 +95,7 @@ function start(port, callback) {
         });
 
         app.use('/api/v1/callback', (req, res) => {
-            res.redirect(`http://localhost:${process.env.VITE_DEV_PORT || process.env.PORT}/`);
+            res.redirect(`${process.env.APP_ORIGIN || 'http://localhost:' + (process.env.VITE_DEV_PORT || process.env.PORT)}/`);
         });
 
         app.use('/api/v1/logout', (req, res) => {

@@ -2,10 +2,14 @@
 
 const assert = require('assert'),
     uuid = require('uuid'),
-    mysql = require('mysql2');
+    { DatabaseSync } = require('node:sqlite'),
+    fs = require('fs'),
+    path = require('path'),
+    { runMigrations } = require('./migrator.js');
 
 module.exports = exports = {
     init: init,
+    testConnection: testConnection,
 
     PROJECT_TYPE_GITHUB: 'github',
     PROJECT_TYPE_GITHUB_MANUAL: 'github_manual',
@@ -45,46 +49,70 @@ module.exports = exports = {
     }
 };
 
-var db = null;
+let db = null;
 
 function init() {
-    const config = require('../database.json');
+    const dbPath = process.env.DB_PATH || path.join(__dirname, '../data/ng-release-bell.db');
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
-    if (!config.defaultEnv) {
-        console.error('defaultEnv missing from database.json');
-        process.exit(1);
-    }
+    db = new DatabaseSync(dbPath);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
 
-    db = mysql.createPool({
-        connectionLimit: 10,
-        waitForConnections: true,
-        host: config[config.defaultEnv].host,
-        port: config[config.defaultEnv].port,
-        user: config[config.defaultEnv].user,
-        password: config[config.defaultEnv].password,
-        database: config[config.defaultEnv].database
-    }).promise();
+    const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+    db.exec(schema);
+
+    runMigrations(db);
+
+    console.log('Database initialized at', dbPath);
+}
+
+function testConnection() {
+    db.prepare('SELECT 1').get();
+    return true;
 }
 
 function projectPostprocess(p) {
     if (p.lastSuccessfulSyncAt === '0000-00-00 00:00:00') p.lastSuccessfulSyncAt = 0;
-    p.enabled = !!p.enabled;
+    if (p.enabled !== undefined) p.enabled = !!p.enabled;
+    if (p.excludePrereleases !== undefined) p.excludePrereleases = !!p.excludePrereleases;
+    if (p.excludeUpdated !== undefined) p.excludeUpdated = !!p.excludeUpdated;
+    if (p.githubAutoImport !== undefined) p.githubAutoImport = !!p.githubAutoImport;
     return p;
 }
 
-async function projectsList(userId) {
+function buildSetClause(data, allowedFields) {
+    const sets = [];
+    const args = [];
+    for (const [field, value] of Object.entries(data)) {
+        if (allowedFields.has(field) && value !== undefined) {
+            sets.push(`${field}=?`);
+            if (typeof value === 'boolean') args.push(value ? 1 : 0);
+            else args.push(value);
+        }
+    }
+    return { sets, args };
+}
+
+function projectsList(userId) {
     assert.strictEqual(typeof userId, 'string');
 
-    // we order by lastSuccessfulSyncAt so that if we hit API rate limits, each project gets a chance eventually
-    const [result] = await db.query('SELECT projects.*,releases.version,releases.createdAt FROM projects LEFT JOIN releases on releases.id = (SELECT releases.id FROM releases WHERE projectId=projects.id ORDER BY createdAt DESC LIMIT 1) WHERE userId=? ORDER BY lastSuccessfulSyncAt ASC', [ userId ]);
+    const result = db.prepare(`
+        SELECT projects.*, releases.version, releases.createdAt
+        FROM projects
+        LEFT JOIN releases ON releases.id = (
+            SELECT releases.id FROM releases WHERE projectId=projects.id ORDER BY createdAt DESC LIMIT 1
+        )
+        WHERE userId=? ORDER BY lastSuccessfulSyncAt ASC
+    `).all(userId);
 
     result.forEach(projectPostprocess);
 
-    // apply version filters to find the latest release that passes the filter for each project
     const { passesVersionFilters } = require('./regex-validator.js');
     const NON_SEMVER_TAGS = ['latest', 'stable', 'develop', 'main', 'master', 'edge', 'nightly'];
     for (const project of result) {
-        const [releases] = await db.query('SELECT version, createdAt, prerelease FROM releases WHERE projectId=? ORDER BY createdAt DESC', [ project.id ]);
+        const releases = db.prepare('SELECT version, createdAt, prerelease FROM releases WHERE projectId=? ORDER BY createdAt DESC').all(project.id);
 
         const filtered = releases.filter(r => {
             if (NON_SEMVER_TAGS.includes(r.version.toLowerCase())) return false;
@@ -97,7 +125,6 @@ async function projectsList(userId) {
             project.version = filtered[0].version;
             project.createdAt = filtered[0].createdAt;
         } else if (project.version) {
-            // no filtered releases but we have a raw version from the JOIN — check if it's semver
             if (NON_SEMVER_TAGS.includes(project.version.toLowerCase())) {
                 project.version = null;
                 project.createdAt = null;
@@ -108,18 +135,24 @@ async function projectsList(userId) {
     return result;
 }
 
-async function projectsListByType(userId, type) {
+function projectsListByType(userId, type) {
     assert.strictEqual(typeof userId, 'string');
     assert.strictEqual(typeof type, 'string');
 
-    const [result] = await db.query('SELECT projects.*,releases.version,releases.createdAt FROM projects LEFT JOIN releases on releases.id = (SELECT releases.id FROM releases WHERE projectId=projects.id ORDER BY createdAt DESC LIMIT 1) WHERE userId=? AND type=?', [ userId, type ]);
+    const result = db.prepare(`
+        SELECT projects.*, releases.version, releases.createdAt
+        FROM projects
+        LEFT JOIN releases ON releases.id = (
+            SELECT releases.id FROM releases WHERE projectId=projects.id ORDER BY createdAt DESC LIMIT 1
+        )
+        WHERE userId=? AND type=?
+    `).all(userId, type);
 
     result.forEach(projectPostprocess);
-
     return result;
 }
 
-async function projectsAdd(project) {
+function projectsAdd(project) {
     assert.strictEqual(typeof project, 'object');
 
     project.id = uuid.v4();
@@ -132,139 +165,120 @@ async function projectsAdd(project) {
     project.versionFilters = project.versionFilters || null;
     project.lastNotifiedAt = 0;
 
-    db.query('INSERT INTO projects (id, userId, name, origin, enabled, lastSuccessfulSyncAt, type, emailFrequency, excludePrereleases, excludeUpdated, versionFilters, lastNotifiedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-        [ project.id, project.userId, project.name, project.origin, project.enabled, project.lastSuccessfulSyncAt, project.type, project.emailFrequency, project.excludePrereleases, project.excludeUpdated, project.versionFilters, project.lastNotifiedAt ]);
+    db.prepare('INSERT INTO projects (id, userId, name, origin, enabled, lastSuccessfulSyncAt, type, emailFrequency, excludePrereleases, excludeUpdated, versionFilters, lastNotifiedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+        .run(project.id, project.userId, project.name, project.origin, project.enabled ? 1 : 0, project.lastSuccessfulSyncAt, project.type, project.emailFrequency, project.excludePrereleases ? 1 : 0, project.excludeUpdated ? 1 : 0, project.versionFilters, project.lastNotifiedAt);
 
     return projectPostprocess(project);
 }
 
-async function projectsGet(projectId) {
+function projectsGet(projectId) {
     assert.strictEqual(typeof projectId, 'string');
 
-    const [result] = await db.query('SELECT * FROM projects WHERE id=?', [ projectId ]);
-    if (!result.length) throw new Error('not found');
+    const result = db.prepare('SELECT * FROM projects WHERE id=?').get(projectId);
+    if (!result) throw new Error('not found');
 
-    return projectPostprocess(result[0]);
+    return projectPostprocess(result);
 }
 
-async function projectsUpdate(projectId, data) {
+function projectsUpdate(projectId, data) {
     assert.strictEqual(typeof projectId, 'string');
     assert.strictEqual(typeof data, 'object');
 
-    const allowed = {};
-    if (data.enabled !== undefined) allowed.enabled = data.enabled;
-    if (data.name !== undefined) allowed.name = data.name;
-    if (data.type !== undefined) allowed.type = data.type;
-    if (data.origin !== undefined) allowed.origin = data.origin;
-    if (data.lastSuccessfulSyncAt !== undefined) allowed.lastSuccessfulSyncAt = data.lastSuccessfulSyncAt;
-    if (data.emailFrequency !== undefined) allowed.emailFrequency = data.emailFrequency;
-    if (data.excludePrereleases !== undefined) allowed.excludePrereleases = data.excludePrereleases;
-    if (data.excludeUpdated !== undefined) allowed.excludeUpdated = data.excludeUpdated;
-    if (data.versionFilters !== undefined) allowed.versionFilters = data.versionFilters;
-    if (data.lastNotifiedAt !== undefined) allowed.lastNotifiedAt = data.lastNotifiedAt;
+    const allowedFields = new Set(['enabled', 'name', 'type', 'origin', 'lastSuccessfulSyncAt', 'emailFrequency', 'excludePrereleases', 'excludeUpdated', 'versionFilters', 'lastNotifiedAt']);
+    const { sets, args } = buildSetClause(data, allowedFields);
 
-    if (Object.keys(allowed).length === 0) return;
+    if (sets.length === 0) return;
 
-    await db.query('UPDATE projects SET ? WHERE id=?', [ allowed, projectId ]);
+    args.push(projectId);
+    db.prepare(`UPDATE projects SET ${sets.join(',')} WHERE id=?`).run(...args);
 }
 
-async function projectsRemove(projectId) {
+function projectsRemove(projectId) {
     assert.strictEqual(typeof projectId, 'string');
 
-    await db.query('DELETE FROM releases WHERE projectId=?', [ projectId ]);
-    await db.query('DELETE FROM projects WHERE id=?', [ projectId ]);
+    db.prepare('DELETE FROM releases WHERE projectId=?').run(projectId);
+    db.prepare('DELETE FROM projects WHERE id=?').run(projectId);
 }
 
-async function projectsListAllWithPendingReleases() {
-    const [result] = await db.query('SELECT DISTINCT p.* FROM projects p INNER JOIN releases r ON r.projectId = p.id WHERE r.notified=FALSE', []);
+function projectsListAllWithPendingReleases() {
+    const result = db.prepare('SELECT DISTINCT p.* FROM projects p INNER JOIN releases r ON r.projectId = p.id WHERE r.notified=0').all();
     result.forEach(projectPostprocess);
     return result;
 }
 
-async function usersList() {
-    const [result] = await db.query('SELECT * FROM users', []);
-    return result;
+function usersList() {
+    return db.prepare('SELECT * FROM users').all();
 }
 
-async function usersAdd(user) {
+function usersAdd(user) {
     assert.strictEqual(typeof user, 'object');
 
-    await db.query('INSERT INTO users (id, email, githubToken) VALUES (?, ?, ?)',
-        [ user.id, user.email, user.githubToken ]);
-
+    db.prepare('INSERT INTO users (id, email, githubToken) VALUES (?, ?, ?)').run(user.id, user.email, user.githubToken);
     return user;
 }
 
-async function usersGet(userId) {
+function usersGet(userId) {
     assert.strictEqual(typeof userId, 'string');
 
-    const [result] = await db.query('SELECT * FROM users WHERE id=?', [ userId ]);
-    if (!result.length) throw new Error('no such user');
+    const result = db.prepare('SELECT * FROM users WHERE id=?').get(userId);
+    if (!result) throw new Error('no such user');
 
-    return result[0];
+    return result;
 }
 
-async function usersUpdate(userId, githubToken, email, quayToken, githubAutoImport) {
+function usersUpdate(userId, githubToken, email, quayToken, githubAutoImport) {
     assert.strictEqual(typeof userId, 'string');
     assert.strictEqual(typeof githubToken, 'string');
     assert.strictEqual(typeof email, 'string');
 
-    const fields = [];
-    const args = [];
-
-    fields.push('githubToken=?'); args.push(githubToken);
-    fields.push('email=?'); args.push(email);
+    const fields = ['githubToken=?', 'email=?'];
+    const args = [githubToken, email];
 
     if (quayToken !== undefined) { fields.push('quayToken=?'); args.push(quayToken); }
-    if (githubAutoImport !== undefined) { fields.push('githubAutoImport=?'); args.push(githubAutoImport); }
+    if (githubAutoImport !== undefined) { fields.push('githubAutoImport=?'); args.push(githubAutoImport ? 1 : 0); }
 
     args.push(userId);
-
-    await db.query('UPDATE users SET ' + fields.join(',') + ' WHERE id=?', args);
+    db.prepare(`UPDATE users SET ${fields.join(',')} WHERE id=?`).run(...args);
 }
 
-async function releasesList(projectId) {
+function releasesList(projectId) {
     assert.strictEqual(typeof projectId, 'string');
 
-    const [result] = await db.query('SELECT * FROM releases WHERE projectId=?', [ projectId ]);
-
-    return result;
+    return db.prepare('SELECT * FROM releases WHERE projectId=?').all(projectId);
 }
 
-async function releasesAdd(release) {
+function releasesAdd(release) {
     assert.strictEqual(typeof release, 'object');
 
     release.id = uuid.v4();
     release.createdAt = release.createdAt || 0;
     release.sha = release.sha || '';
 
-    await db.query('INSERT INTO releases (id, projectId, version, body, notified, prerelease, createdAt, sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [ release.id, release.projectId, release.version, release.body, release.notified, release.prerelease, release.createdAt, release.sha ]);
+    db.prepare('INSERT INTO releases (id, projectId, version, body, notified, prerelease, createdAt, sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(release.id, release.projectId, release.version, release.body, release.notified ? 1 : 0, release.prerelease ? 1 : 0, release.createdAt, release.sha);
 
     return release;
 }
 
-async function releasesUpdate(releaseId, data) {
+function releasesUpdate(releaseId, data) {
     assert.strictEqual(typeof releaseId, 'string');
     assert.strictEqual(typeof data, 'object');
 
-    const allowed = {};
-    if (data.notified !== undefined) allowed.notified = data.notified;
-    if (data.sha !== undefined) allowed.sha = data.sha;
+    const allowedFields = new Set(['notified', 'sha']);
+    const { sets, args } = buildSetClause(data, allowedFields);
 
-    if (Object.keys(allowed).length === 0) return;
+    if (sets.length === 0) return;
 
-    await db.query('UPDATE releases SET ? WHERE id=?', [ allowed, releaseId ]);
+    args.push(releaseId);
+    db.prepare(`UPDATE releases SET ${sets.join(',')} WHERE id=?`).run(...args);
 }
 
-async function releasesListAllPending() {
-    const [result] = await db.query('SELECT * FROM releases WHERE notified=FALSE', []);
-    return result;
+function releasesListAllPending() {
+    return db.prepare('SELECT * FROM releases WHERE notified=0').all();
 }
 
-async function releasesListPendingForProject(projectId) {
+function releasesListPendingForProject(projectId) {
     assert.strictEqual(typeof projectId, 'string');
 
-    const [result] = await db.query('SELECT * FROM releases WHERE projectId=? AND notified=FALSE', [ projectId ]);
-    return result;
+    return db.prepare('SELECT * FROM releases WHERE projectId=? AND notified=0').all(projectId);
 }

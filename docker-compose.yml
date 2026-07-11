@@ -1,39 +1,37 @@
 services:
-  mysql:
-    image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: releasebell
-      MYSQL_USER: releasebell
-      MYSQL_PASSWORD: password
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    restart: unless-stopped
-
-  app:
+  ng-release-bell:
     build: .
-    depends_on:
-      mysql:
-        condition: service_healthy
-    environment:
-      CLOUDRON_MYSQL_HOST: mysql
-      CLOUDRON_MYSQL_PORT: 3306
-      CLOUDRON_MYSQL_USERNAME: releasebell
-      CLOUDRON_MYSQL_PASSWORD: password
-      CLOUDRON_MYSQL_DATABASE: releasebell
+    container_name: ng-release-bell
     ports:
       - "3111:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_PATH=/home/nonroot/data/ng-release-bell.db
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - QUAY_TOKEN=${QUAY_TOKEN:-}
+      - MAIL_SMTP_SERVER=${MAIL_SMTP_SERVER:-}
+      - MAIL_SMTP_PORT=${MAIL_SMTP_PORT:-}
+      - MAIL_SMTP_USERNAME=${MAIL_SMTP_USERNAME:-}
+      - MAIL_SMTP_PASSWORD=${MAIL_SMTP_PASSWORD:-}
+      - MAIL_FROM=${MAIL_FROM:-}
+      - APP_ORIGIN=${APP_ORIGIN:-}
     volumes:
-      - app-data:/app/data
+      - ng-release-bell-data:/home/nonroot/data
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "-e", "const h=require('http');h.get('http://localhost:3000/api/v1/status',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    cap_drop:
+      - ALL
     restart: unless-stopped
 
 volumes:
-  mysql-data:
-  app-data:
+  ng-release-bell-data:

@@ -12,49 +12,62 @@ A self-hosted release notification service. Track releases across multiple provi
 - **Safe regex**: User-supplied regex validated against ReDoS attacks via `safe-regex`
 - **Import/Export**: Backup and restore your tracked projects as JSON
 - **Search**: Filter projects by name, type, or version
+- **SQLite**: Embedded database — no external DB server required
 
-## Installation
+## Requirements
 
-### Docker Compose
+- Node.js 26+ (for built-in `node:sqlite`)
+- [just](https://github.com/casey/just) (task runner)
 
-```bash
-docker compose up -d --build
-```
-
-The app will be available at `http://localhost:3111`.
-
-### Local Development
+## Development
 
 ```bash
-# Start MySQL
-docker compose up -d mysql
+# Install dependencies
+npm install
 
-# Run migrations
-npx db-migrate up
-
-# Start backend
-PORT=3000 node index.js
-
-# Start frontend (separate terminal)
-npx vite
+# Start backend + Vite dev server
+just dev
 ```
 
-The frontend will be at `http://localhost:5173` and proxies API calls to the backend.
+The app runs at `http://localhost:5173`. The backend is at `http://localhost:3000`.
 
-#### Sending Notifications via Email
+SQLite database auto-creates at `./data/ng-release-bell.db`.
 
-Export the following env variables for email notifications:
+## Docker
 
 ```bash
-export CLOUDRON_MAIL_SMTP_SERVER=smtp.example.com
-export CLOUDRON_MAIL_SMTP_PORT=25
-export CLOUDRON_MAIL_SMTP_USERNAME=
-export CLOUDRON_MAIL_SMTP_PASSWORD=
-export CLOUDRON_MAIL_FROM=ng-release-bell@example.com
-export CLOUDRON_APP_ORIGIN=example.com
+# Build and run
+just docker-build-run
+
+# View logs
+just docker-logs
+
+# Stop
+just docker-clean
 ```
+
+The app runs at `http://localhost:3111`.
 
 ## Configuration
+
+Copy `.env` and adjust as needed:
+
+```bash
+cp .env .env
+```
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `DB_PATH` | SQLite file path | No (default: `./data/ng-release-bell.db`) |
+| `MAIL_SMTP_SERVER` | SMTP server for email notifications | No (disables emails if empty) |
+| `MAIL_SMTP_PORT` | SMTP port | No |
+| `MAIL_SMTP_USERNAME` | SMTP username | No |
+| `MAIL_SMTP_PASSWORD` | SMTP password | No |
+| `MAIL_FROM` | From address for emails | No |
+| `APP_ORIGIN` | Public URL of the app | No |
+| `GITHUB_TOKEN` | GitHub API token (for starred repo import + GHCR) | No |
+| `QUAY_TOKEN` | Quay API token | No |
+| `OIDC_ISSUER` | OIDC issuer URL | No (mock login if empty) |
 
 ### Provider Tokens
 
@@ -63,7 +76,11 @@ export CLOUDRON_APP_ORIGIN=example.com
 | GitHub / GHCR | GitHub Token | `read:packages` | [GitHub Settings](https://github.com/settings/tokens/new?description=NG-Release-Bell&scopes=read:packages) |
 | Quay | Quay Token | - | Quay.io > User Settings > CLI Configuration |
 
-Tokens are configured in the Settings dialog.
+Tokens are configured in the Settings dialog or via environment variables.
+
+## Migrating from MySQL
+
+If you have an existing MySQL installation, use the Import/Export feature in Settings to export your projects, then import them into the new SQLite installation.
 
 ## License
 

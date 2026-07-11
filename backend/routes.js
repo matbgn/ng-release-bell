@@ -27,7 +27,8 @@ module.exports = exports = {
         update: projectsUpdate,
         del: projectsDelete,
         releases: projectReleases,
-        sync: projectSync
+        sync: projectSync,
+        syncAll: projectsSyncAll
     },
 
     data: {
@@ -37,7 +38,7 @@ module.exports = exports = {
 };
 
 const PORT = process.env.PORT || 3000;
-const APP_ORIGIN = process.env.CLOUDRON_APP_ORIGIN || `http://localhost:${PORT}`;
+const APP_ORIGIN = process.env.APP_ORIGIN || `http://localhost:${PORT}`;
 
 function login(req, res) {
     res.oidc.login({
@@ -49,7 +50,12 @@ function login(req, res) {
 }
 
 function status(req, res, next) {
-    next(new HttpSuccess(200, {}));
+    try {
+        database.testConnection();
+        next(new HttpSuccess(200, { ok: true, db: true, timestamp: new Date().toISOString() }));
+    } catch (e) {
+        next(new HttpSuccess(200, { ok: true, db: false, error: e.message }));
+    }
 }
 
 function availableProviders(req, res, next) {
@@ -296,6 +302,7 @@ async function dataImport(req, res, next) {
     }
 
     let imported = 0, skipped = 0;
+    const importedProjects = [];
     for (const p of req.body.projects) {
         if (!p.name || !p.type) { skipped++; continue; }
 
@@ -303,7 +310,7 @@ async function dataImport(req, res, next) {
         if (existing.find(e => e.name === p.name && e.type === p.type)) { skipped++; continue; }
 
         try {
-            await database.projects.add({
+            const project = await database.projects.add({
                 userId: req.user.id,
                 name: p.name,
                 type: p.type,
@@ -314,6 +321,7 @@ async function dataImport(req, res, next) {
                 excludeUpdated: p.excludeUpdated || false,
                 versionFilters: p.versionFilters || null,
             });
+            importedProjects.push(project);
             imported++;
         } catch (error) {
             console.error('Failed to import project', p.name, error);
@@ -322,4 +330,27 @@ async function dataImport(req, res, next) {
     }
 
     next(new HttpSuccess(200, { imported, skipped }));
+
+    for (const project of importedProjects) {
+        try {
+            await tasks.syncReleasesByProject(req.user, project);
+        } catch (error) {
+            console.error('Failed to sync imported project', project.name, error);
+        }
+    }
+}
+
+async function projectsSyncAll(req, res, next) {
+    assert.strictEqual(typeof req.user, 'object');
+
+    next(new HttpSuccess(202, {}));
+
+    const projects = await database.projects.list(req.user.id);
+    for (const project of projects) {
+        try {
+            await tasks.syncReleasesByProject(req.user, project);
+        } catch (error) {
+            console.error('Failed to sync project', project.name, error);
+        }
+    }
 }

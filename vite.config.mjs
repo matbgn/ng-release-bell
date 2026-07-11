@@ -3,7 +3,6 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
@@ -16,6 +15,17 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:3000'
+    }
+  },
+  build: {
+    chunkSizeWarningLimit: 700,
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/primevue')) return 'primevue';
+          if (id.includes('node_modules/vue')) return 'vue-vendor';
+        }
+      }
     }
   }
 })
