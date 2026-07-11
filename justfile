@@ -81,33 +81,31 @@ changelog:
 
 docker-build version="$(git-sv cv)":
     #!/usr/bin/env bash
-    @echo "Using version: {{version}}"
+    echo "Using version: {{version}}"
     set -e
     echo "Creating tar files for deployment..."
     mkdir -p ~/Dev/itpark/infrastructure-as-code/ansible/dist/
 
-    echo "Building ng-release-bell docker image with version {{version}}..."
+    echo "Building {{DOCKER_IMAGE_NAME}} docker image with version {{version}}..."
 
-    LAST_NGRB_HASH="$(docker images --format '{{{{.ID}}' ng-release-bell)"
-    echo "Last ng-release-bell hash: $LAST_NGRB_HASH"
+    LAST_NGRB_HASH="$(docker images --format '{{{{.ID}}' '{{DOCKER_IMAGE_NAME}}')"
+    echo "Last {{DOCKER_IMAGE_NAME}} hash: $LAST_NGRB_HASH"
     LAST_NGRB_VERSION="$(docker images --format '{{{{.Tag}}' '{{DOCKER_IMAGE_NAME}}' | sort -V | tail -n 1)"
-    echo "Last ng-release-bell version: $LAST_NGRB_VERSION"
+    echo "Last {{DOCKER_IMAGE_NAME}} version: $LAST_NGRB_VERSION"
 
     # Build with version tag
     docker build -t "{{DOCKER_IMAGE_NAME}}":"{{version}}" .
 
-    NGRB_CHANGED="$(docker images --format '{{{{.ID}}' ng-release-bell)"
-    echo "New ng-release-bell hash: $NGRB_CHANGED"
-
+    NGRB_CHANGED="$(docker images --format '{{{{.ID}}' '{{DOCKER_IMAGE_NAME}}')"
+    echo "New {{DOCKER_IMAGE_NAME}} hash: $NGRB_CHANGED"
     if [ "$LAST_NGRB_HASH" != "$NGRB_CHANGED" ] || [ "$LAST_NGRB_VERSION" != "{{version}}" ]; then
-        echo "Tagging ng-release-bell docker image with version {{version}}..."
-        # docker tag is already done above, but ensuring latest is updated
-        docker tag ng-release-bell:latest ng-release-bell:latest
-        echo "Saving ng-release-bell docker image to tar file..."
+        echo "Tagging {{DOCKER_IMAGE_NAME}} docker image with version {{version}}..."
+        docker tag "{{DOCKER_IMAGE_NAME}}":"{{version}}" "{{DOCKER_IMAGE_NAME}}:latest"
+        echo "Saving {{DOCKER_IMAGE_NAME}} docker image to tar file..."
         docker save -o ~/Dev/itpark/infrastructure-as-code/ansible/dist/ng-release-bell.tar "{{DOCKER_IMAGE_NAME}}":"{{version}}"
         echo "Tar file created successfully: ~/Dev/itpark/infrastructure-as-code/ansible/dist/ng-release-bell.tar"
     else
-        echo "ng-release-bell docker image has not changed"
+        echo "{{DOCKER_IMAGE_NAME}} docker image has not changed"
     fi
 
 # --- Docker Compose Run Task (with build) ---
