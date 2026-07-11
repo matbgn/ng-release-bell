@@ -1,25 +1,70 @@
-# Release Bell
+# NG Release Bell
 
-A Self-Hosted Release Notification Service. Stay on top of releases for repos you star on GitHub.
+A self-hosted release notification service. Track releases across multiple providers: GitHub, GitLab, Gitea/Codeberg, NPM, PyPI, Docker Hub, Quay, GitHub Container Registry, and SourceForge.
+
+## Features
+
+- **Multi-provider support**: GitHub, GitLab, Gitea/Codeberg, NPM, PyPI, Docker Hub, Quay, GHCR, SourceForge
+- **Per-project notification settings**: Instant, hourly, daily, or weekly email digests
+- **Version filtering**: Regex-based include/exclude patterns with live preview
+- **Pre-release exclusion**: Suppress notifications for pre-releases
+- **Re-release suppression**: Detect and optionally suppress re-released versions
+- **Safe regex**: User-supplied regex validated against ReDoS attacks via `safe-regex`
+- **Import/Export**: Backup and restore your tracked projects as JSON
+- **Search**: Filter projects by name, type, or version
 
 ## Installation
 
-### Cloudron
+### Docker Compose
 
-Release Bell is packaged already as a Cloudron app and is installable directly from the Cloudron App Store.
-It is fully integrated with the Cloudron usermanagement. The email sending is also preconfigured and needs not further configuration to work.
+```bash
+docker compose up -d --build
+```
 
-[![Install](https://cloudron.io/img/button.svg)](https://cloudron.io/button.html?app=io.cloudron.releasebell)
+The app will be available at `http://localhost:3111`.
+
+### Local Development
+
+```bash
+# Start MySQL
+docker compose up -d mysql
+
+# Run migrations
+npx db-migrate up
+
+# Start backend
+PORT=3000 node index.js
+
+# Start frontend (separate terminal)
+npx vite
+```
+
+The frontend will be at `http://localhost:5173` and proxies API calls to the backend.
 
 #### Sending Notifications via Email
 
-Release Bell currently only supports sending out release notifications via email, so for a production deployment, export the following env variables and adjust to your setup:
+Export the following env variables for email notifications:
+
+```bash
+export CLOUDRON_MAIL_SMTP_SERVER=smtp.example.com
+export CLOUDRON_MAIL_SMTP_PORT=25
+export CLOUDRON_MAIL_SMTP_USERNAME=
+export CLOUDRON_MAIL_SMTP_PASSWORD=
+export CLOUDRON_MAIL_FROM=ng-release-bell@example.com
+export CLOUDRON_APP_ORIGIN=example.com
 ```
-export MAIL_SMTP_SERVER=smtp.example.com
-export MAIL_SMTP_PORT=25
-export MAIL_SMTP_USERNAME=
-export MAIL_SMTP_PASSWORD=
-export MAIL_FROM=releasebell@example.com
-export MAIL_DOMAIN=example.com
-export APP_ORIGIN=example.com
-```
+
+## Configuration
+
+### Provider Tokens
+
+| Provider | Token | Scope | Where to get |
+|----------|-------|-------|--------------|
+| GitHub / GHCR | GitHub Token | `read:packages` | [GitHub Settings](https://github.com/settings/tokens/new?description=NG-Release-Bell&scopes=read:packages) |
+| Quay | Quay Token | - | Quay.io > User Settings > CLI Configuration |
+
+Tokens are configured in the Settings dialog.
+
+## License
+
+MIT

@@ -27,13 +27,18 @@ function start(port, callback) {
 
     router.get ('/api/v1/login', routes.login);
     router.get ('/api/v1/status', routes.status);
+    router.get ('/api/v1/providers', routes.auth, routes.availableProviders);
     router.get ('/api/v1/profile', routes.auth, routes.profile.get);
     router.post('/api/v1/profile', routes.auth, routes.profile.update);
     router.get ('/api/v1/projects', routes.auth, routes.projects.list);
     router.post('/api/v1/projects', routes.auth, routes.projects.add);
     router.get ('/api/v1/projects/:projectId', routes.auth, routes.projects.get);
+    router.get ('/api/v1/projects/:projectId/releases', routes.auth, routes.projects.releases);
+    router.post('/api/v1/projects/:projectId/sync', routes.auth, routes.projects.sync);
     router.post('/api/v1/projects/:projectId', routes.auth, routes.projects.update);
     router.del ('/api/v1/projects/:projectId', routes.auth, routes.projects.del);
+    router.get ('/api/v1/data/export', routes.auth, routes.data.export);
+    router.post('/api/v1/data/import', routes.auth, routes.data.import);
 
     app.set('trust proxy', 1);
 
@@ -62,13 +67,10 @@ function start(port, callback) {
             }
         }));
     } else {
-        // mock oidc
-        let loginSession = false;
-
+        // mock oidc (login bypass mode for local testing)
         app.use((req, res, next) => {
             res.oidc = {
                 login(options) {
-                    loginSession = true;
                     res.redirect(options.authorizationParams.redirect_uri);
                 }
             };
@@ -84,7 +86,7 @@ function start(port, callback) {
                     email_verified: true
                 },
                 isAuthenticated() {
-                    return loginSession;
+                    return true;
                 }
             };
 
@@ -96,7 +98,6 @@ function start(port, callback) {
         });
 
         app.use('/api/v1/logout', (req, res) => {
-            loginSession = false;
             res.status(200).send({});
         });
     }

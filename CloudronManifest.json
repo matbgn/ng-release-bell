@@ -1,21 +1,25 @@
 {
   "id": "io.cloudron.releasebell",
-  "title": "ReleaseBell",
-  "author": "Cloudron Team",
+  "title": "NG Release Bell",
+  "author": "NG Release Bell",
   "description": "file://DESCRIPTION.md",
-  "tagline": "Release notification service",
+  "tagline": "Multi-provider release notification service",
   "tags": [
     "tags",
     "releases",
-    "github"
+    "github",
+    "gitlab",
+    "npm",
+    "pypi",
+    "docker"
   ],
-  "version": "1.13.0",
-  "upstreamVersion": "1.11.2",
+  "version": "2.0.0",
+  "upstreamVersion": "2.0.0",
   "healthCheckPath": "/api/v1/status",
   "httpPort": 3000,
   "manifestVersion": 2,
-  "website": "https://releasebell.com",
-  "contactEmail": "support@cloudron.io",
+  "website": "https://github.com/matbgn/ng-release-bell",
+  "contactEmail": "",
   "icon": "logo.png",
   "addons": {
     "oidc": {
@@ -27,14 +31,9 @@
     },
     "localstorage": {}
   },
-  "mediaLinks": [
-    "https://screenshots.cloudron.io/io.cloudron.releasebell/releasebell_1.png",
-    "https://screenshots.cloudron.io/io.cloudron.releasebell/releasebell_2.png",
-    "https://screenshots.cloudron.io/io.cloudron.releasebell/releasebell_3.png",
-    "https://screenshots.cloudron.io/io.cloudron.releasebell/releasebell_4.png"
-  ],
-  "forumUrl": "https://forum.cloudron.io/category/55/release-bell",
+  "mediaLinks": [],
+  "forumUrl": "",
   "changelog": "file://CHANGELOG",
   "minBoxVersion": "7.5.1",
-  "documentationUrl": "https://docs.cloudron.io/packages/releasebell/"
+  "documentationUrl": "https://github.com/matbgn/ng-release-bell"
 }

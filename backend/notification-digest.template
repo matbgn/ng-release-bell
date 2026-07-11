@@ -4,11 +4,9 @@
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="x-apple-disable-message-reformatting">
-
-  <title>{{ project.name }} {{ release.version }} released</title>
+  <title>NG Release Bell Digest: {{ project.name }}</title>
   <style>
-    html,
-    body {
+    html, body {
       margin: 0 auto !important;
       padding: 0 !important;
       height: 100% !important;
@@ -16,68 +14,49 @@
       background: white;
       color: #393939;
     }
-
-    /* What it does: Stops email clients resizing small text. */
     * {
       -ms-text-size-adjust: 100%;
       -webkit-text-size-adjust: 100%;
     }
-
     a {
       color: #66b1ff;
       text-decoration: none;
     }
-
     a:hover {
       color: #f91880;
     }
-
     @media (prefers-color-scheme: dark) {
       body {
         background: #1c1c1c;
         color: #959595;
       }
     }
-
   </style>
 </head>
-
 <body>
-
 <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 0; padding: 20px; font-family: Helvetica, sans-serif;">
   <tr>
-    {{#if release.prerelease}}
-    <td align="center" class="header" style="padding: 40px 0 30px 0; background-color: #bf4c24; border-radius: 4px; font-size: 20px;">
-    {{else}}
     <td align="center" class="header" style="padding: 40px 0 30px 0; background-color: #409eff; border-radius: 4px; font-size: 20px;">
-    {{/if}}
-        <a href="{{ versionLink }}" style="color: #fff;">{{ project.name }}</a>
+      <a href="{{ settingsLink }}" style="color: #fff;">NG Release Bell Digest</a>
     </td>
   </tr>
   <tr>
     <td style="padding: 40px 30px 40px 30px; font-size: 16px;">
-      <table border="0" cellpadding="0" cellspacing="0" width="100%">
+      <h2 style="color: #303133;">{{ project.name }}</h2>
+      <p style="color: #606266; font-size: 14px;">{{ releases.length }} new release(s) since your last notification:</p>
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+        {{#each releases}}
         <tr>
-          <td>
-            <a href="{{ versionLink }}" style="color: #606266;">{{ release.version }}
-            {{#if release.prerelease}}
-              &nbsp; (prerelease)
+          <td style="padding: 10px 0; border-bottom: 1px solid #ebeef5;">
+            <a href="{{ this.versionLink }}" style="color: #606266; font-size: 16px;">{{ this.version }}</a>
+            {{#if this.prerelease}}
+              &nbsp; <span style="font-size: 12px; color: #e6a23c;">(prerelease)</span>
             {{/if}}
-            </a>
+            <br/>
+            <span style="color: #909399; font-size: 12px;">{{ this.date }}</span>
           </td>
         </tr>
-        {{#if release.body}}
-        <tr>
-          <td>
-            <span style="color: #606266; font-size: 14px;">{{markdown release.body }}</span>
-          </td>
-        </tr>
-        {{/if}}
-        <tr>
-          <td style="padding-top: 20px; color: #606266; font-size: 16px;">
-            A new {{#if release.prerelease}}prerelease{{else}}release{{/if}} {{ release.version }} for {{ project.name }} was published. Read more about this release on <a href="{{ versionLink }}">the release page</a>.
-          </td>
-        </tr>
+        {{/each}}
       </table>
     </td>
   </tr>
@@ -88,6 +67,5 @@
     </td>
   </tr>
 </table>
-
 </body>
 </html>

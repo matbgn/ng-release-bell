@@ -4,6 +4,7 @@ var assert = require('assert'),
     database = require('./database.js'),
     github = require('./github.js'),
     tasks = require('./tasks.js'),
+    { validateVersionFilters } = require('./regex-validator.js'),
     lastMile = require('connect-lastmile'),
     HttpError = lastMile.HttpError,
     HttpSuccess = lastMile.HttpSuccess;
@@ -12,6 +13,7 @@ module.exports = exports = {
     status,
     auth,
     login,
+    availableProviders,
 
     profile: {
         get: profileGet,
@@ -23,7 +25,14 @@ module.exports = exports = {
         add: projectAdd,
         list: projectsList,
         update: projectsUpdate,
-        del: projectsDelete
+        del: projectsDelete,
+        releases: projectReleases,
+        sync: projectSync
+    },
+
+    data: {
+        export: dataExport,
+        import: dataImport
     }
 };
 
@@ -41,6 +50,22 @@ function login(req, res) {
 
 function status(req, res, next) {
     next(new HttpSuccess(200, {}));
+}
+
+function availableProviders(req, res, next) {
+    const providers = {
+        github: true,
+        github_manual: true,
+        gitlab: true,
+        gitea: true,
+        npm: true,
+        pypi: true,
+        dockerhub: true,
+        quay: !!(process.env.QUAY_TOKEN || (req.user && req.user.quayToken)),
+        ghcr: !!(process.env.GITHUB_TOKEN || (req.user && req.user.githubToken)),
+        sourceforge: true
+    };
+    next(new HttpSuccess(200, { providers }));
 }
 
 async function auth(req, res, next) {
@@ -82,25 +107,30 @@ function profileGet(req, res, next) {
 async function profileUpdate(req, res, next) {
     assert.strictEqual(typeof req.user, 'object');
 
-    const githubToken = req.body.githubToken || '';
+    const githubToken = req.body.githubToken !== undefined ? req.body.githubToken : req.user.githubToken;
+    const quayToken = req.body.quayToken !== undefined ? req.body.quayToken : (req.user.quayToken || '');
+    const githubAutoImport = req.body.githubAutoImport !== undefined ? req.body.githubAutoImport : req.user.githubAutoImport;
 
-    try {
-        await github.verifyToken(githubToken);
-    } catch (error) {
-        return next(new HttpError(402, error.message));
+    if (githubToken !== req.user.githubToken) {
+        try {
+            await github.verifyToken(githubToken);
+        } catch (error) {
+            return next(new HttpError(402, error.message));
+        }
     }
 
     try {
-        await database.users.update(req.user.id, githubToken, req.user.email);
+        await database.users.update(req.user.id, githubToken, req.user.email, quayToken, githubAutoImport);
     } catch (error) {
         return next(new HttpError(500, error));
     }
     req.user.githubToken = githubToken;
+    req.user.quayToken = quayToken;
+    req.user.githubAutoImport = githubAutoImport;
 
     next(new HttpSuccess(202, {}));
 
-    // kick off a round of syncing for the new github token
-    if (githubToken) tasks.run();
+    if (githubToken && githubToken !== req.user.githubToken) tasks.run();
 }
 
 async function projectsList(req, res, next) {
@@ -120,7 +150,19 @@ async function projectAdd(req, res, next) {
     assert.strictEqual(typeof req.user, 'object');
 
     if (!req.body.type) return next(new HttpError(400, 'type is required'));
-    if ([ database.PROJECT_TYPE_GITHUB_MANUAL, database.PROJECT_TYPE_GITLAB, database.PROJECT_TYPE_WEBSITE ].indexOf(req.body.type) === -1) return next(new HttpError(400, 'invalid type'));
+    const ALLOWED_TYPES = [
+        database.PROJECT_TYPE_GITHUB_MANUAL,
+        database.PROJECT_TYPE_GITLAB,
+        database.PROJECT_TYPE_WEBSITE,
+        database.PROJECT_TYPE_GITEA,
+        database.PROJECT_TYPE_NPM,
+        database.PROJECT_TYPE_PYPI,
+        database.PROJECT_TYPE_DOCKERHUB,
+        database.PROJECT_TYPE_QUAY,
+        database.PROJECT_TYPE_GHCR,
+        database.PROJECT_TYPE_SOURCEFORGE
+    ];
+    if (ALLOWED_TYPES.indexOf(req.body.type) === -1) return next(new HttpError(400, 'invalid type'));
 
     const project = {
         type: req.body.type,
@@ -164,6 +206,11 @@ async function projectsUpdate(req, res, next) {
     assert.strictEqual(typeof req.user, 'object');
     assert.strictEqual(typeof req.params.projectId, 'string');
 
+    if (req.body.versionFilters) {
+        const result = validateVersionFilters(req.body.versionFilters);
+        if (!result.valid) return next(new HttpError(400, result.error));
+    }
+
     try {
         await database.projects.update(req.params.projectId, req.body);
     } catch (error) {
@@ -178,10 +225,101 @@ async function projectsDelete(req, res, next) {
     assert.strictEqual(typeof req.params.projectId, 'string');
 
     try {
-        database.projects.remove(req.params.projectId);
+        await database.projects.remove(req.params.projectId);
     } catch (error) {
         return next(new HttpError(500, error));
     }
 
     next(new HttpSuccess(202, {}));
+}
+
+async function projectReleases(req, res, next) {
+    assert.strictEqual(typeof req.user, 'object');
+    assert.strictEqual(typeof req.params.projectId, 'string');
+
+    try {
+        const result = await database.releases.list(req.params.projectId);
+        result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        return next(new HttpSuccess(200, { releases: result.slice(0, 20) }));
+    } catch (error) {
+        return next(new HttpError(500, error));
+    }
+}
+
+async function projectSync(req, res, next) {
+    assert.strictEqual(typeof req.user, 'object');
+    assert.strictEqual(typeof req.params.projectId, 'string');
+
+    let project;
+    try {
+        project = await database.projects.get(req.params.projectId);
+    } catch (error) {
+        return next(new HttpError(404, 'project not found'));
+    }
+
+    next(new HttpSuccess(202, {}));
+
+    try {
+        await tasks.syncReleasesByProject(req.user, project);
+    } catch (error) {
+        console.error('Failed to sync project', project.name, error);
+    }
+}
+
+async function dataExport(req, res, next) {
+    assert.strictEqual(typeof req.user, 'object');
+
+    const projects = await database.projects.list(req.user.id);
+    const data = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        projects: projects.map(p => ({
+            name: p.name,
+            type: p.type,
+            origin: p.origin,
+            enabled: p.enabled,
+            emailFrequency: p.emailFrequency,
+            excludePrereleases: p.excludePrereleases,
+            excludeUpdated: p.excludeUpdated,
+            versionFilters: p.versionFilters,
+        }))
+    };
+
+    next(new HttpSuccess(200, data));
+}
+
+async function dataImport(req, res, next) {
+    assert.strictEqual(typeof req.user, 'object');
+
+    if (!req.body.projects || !Array.isArray(req.body.projects)) {
+        return next(new HttpError(400, 'projects array is required'));
+    }
+
+    let imported = 0, skipped = 0;
+    for (const p of req.body.projects) {
+        if (!p.name || !p.type) { skipped++; continue; }
+
+        const existing = await database.projects.list(req.user.id);
+        if (existing.find(e => e.name === p.name && e.type === p.type)) { skipped++; continue; }
+
+        try {
+            await database.projects.add({
+                userId: req.user.id,
+                name: p.name,
+                type: p.type,
+                origin: p.origin || '',
+                enabled: p.enabled !== undefined ? p.enabled : true,
+                emailFrequency: p.emailFrequency || 'instant',
+                excludePrereleases: p.excludePrereleases || false,
+                excludeUpdated: p.excludeUpdated || false,
+                versionFilters: p.versionFilters || null,
+            });
+            imported++;
+        } catch (error) {
+            console.error('Failed to import project', p.name, error);
+            skipped++;
+        }
+    }
+
+    next(new HttpSuccess(200, { imported, skipped }));
 }

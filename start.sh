@@ -3,7 +3,7 @@
 set -eu
 
 export NODE_ENV=production
-export DEBUG="releasebell*"
+export DEBUG="ngreleasebell*"
 
 # Creating a secret for web sessions
 if [[ ! -f /app/data/session.secret ]]; then

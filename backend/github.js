@@ -17,7 +17,7 @@ function buildOctokit(token) {
     const CustomOctokit = Octokit.plugin(retry, throttling);
     const octokit = new CustomOctokit({
         auth: token,
-        userAgent: 'releasebell@cloudron',
+        userAgent: 'ng-release-bell',
         throttle: {
             onRateLimit: (retryAfter, options) => {
                 console.log(`Request quota exhausted for request ${options.method} ${options.url}`);
@@ -119,15 +119,15 @@ async function getRelease(token, project, version) {
         release = await octokit.repos.getReleaseByTag({ owner, repo, tag: version });
     } catch (error) {
         // no release tags is not an error
-        if (error.status === 404) return '';
+        if (error.status === 404) return { body: '', prerelease: false, publishedAt: null };
 
         rethrow(error);
     }
 
-    if (!release.data.body) return { body: '', prerelease: false };
+    if (!release.data.body) return { body: '', prerelease: release.data.prerelease, publishedAt: release.data.published_at };
 
     let body = release.data.body.replace(/\r\n/g, '\n');
-    return { body, prerelease: release.data.prerelease };
+    return { body, prerelease: release.data.prerelease, publishedAt: release.data.published_at };
 }
 
 // Returns { createdAt, message }

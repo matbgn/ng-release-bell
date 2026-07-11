@@ -12,5 +12,10 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./frontend', import.meta.url))
     }
+  },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000'
+    }
   }
 })

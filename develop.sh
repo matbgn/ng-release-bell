@@ -26,7 +26,7 @@ mysql -h"${MYSQL_IP}" -uroot -ppassword -e "ALTER USER 'root' IDENTIFIED WITH my
 echo "=> Ensure database"
 mysql -h"${MYSQL_IP}" -uroot -ppassword -e 'CREATE DATABASE IF NOT EXISTS releasebell'
 
-export DEBUG="releasebell*"
+export DEBUG="ngreleasebell*"
 
 echo "=> Generating session secret"
 mkdir -p ./.dev
