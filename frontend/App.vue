@@ -2,7 +2,31 @@
   <div class="login-container" v-show="!busy && !user">
     <div class="login-logo"><img src="/favicon.png"/></div>
     <h1>NG Release Bell</h1>
-    <a :href="loginUrl"><Button id="loginButton" label="Login"/></a>
+
+    <a v-if="authConfig.mode === 'oidc'" :href="loginUrl"><Button id="loginButton" label="Login"/></a>
+
+    <form v-else-if="authConfig.needsSetup" @submit="onSetupSubmit()" @submit.prevent>
+      <p>Welcome! Create an admin password to get started.</p>
+      <div class="form-field">
+        <label for="setupPasswordInput">Password</label>
+        <InputText id="setupPasswordInput" type="password" v-model="setupDialog.password" autofocus required :class="{ 'p-invalid': setupDialog.error }"/>
+      </div>
+      <div class="form-field">
+        <label for="setupConfirmInput">Confirm Password</label>
+        <InputText id="setupConfirmInput" type="password" v-model="setupDialog.confirm" required :class="{ 'p-invalid': setupDialog.error }"/>
+        <small class="text-error" v-show="setupDialog.error">{{ setupDialog.error }}</small>
+      </div>
+      <Button label="Create Admin" id="setupSubmitButton" :icon="setupDialog.busy ? 'pi pi-spin pi-spinner' : 'pi pi-check'" :disabled="!setupDialog.password || setupDialog.busy" @click="onSetupSubmit()"/>
+    </form>
+
+    <form v-else @submit="onPasswordLogin()" @submit.prevent>
+      <div class="form-field">
+        <label for="loginPasswordInput">Password</label>
+        <InputText id="loginPasswordInput" type="password" v-model="loginDialog.password" autofocus required :class="{ 'p-invalid': loginDialog.error }"/>
+        <small class="text-error" v-show="loginDialog.error">{{ loginDialog.error }}</small>
+      </div>
+      <Button label="Login" id="loginPasswordButton" :icon="loginDialog.busy ? 'pi pi-spin pi-spinner' : 'pi pi-sign-in'" :disabled="!loginDialog.password || loginDialog.busy" @click="onPasswordLogin()"/>
+    </form>
   </div>
   <MainLayout v-show="!busy && user">
     <template #dialogs>
@@ -113,6 +137,15 @@
         <form @submit="onSettingsSubmit()" @submit.prevent>
           <div>
             <div class="form-field">
+              <label for="emailInput">Email (where to receive updates)</label>
+              <div style="display: flex; gap: 10px; align-items: flex-start;">
+                <InputText id="emailInput" type="email" v-model="settingsDialog.email" style="flex: 1" :class="{ 'p-invalid': settingsDialog.error }"/>
+                <Button label="Send test email" icon="pi pi-send" severity="secondary" size="small" :loading="settingsDialog.testEmailBusy" @click="onSendTestEmail()"/>
+              </div>
+              <small style="display: block; margin-top: 4px; color: var(--text-color-secondary, #999);">Release notifications and digests are sent to this address. Use the button to validate your SMTP configuration.</small>
+            </div>
+            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;"/>
+            <div class="form-field">
               <label for="githubTokenInput">Github Token</label>
               <InputText id="githubTokenInput" type="text" v-model="settingsDialog.githubToken" autofocus :class="{ 'p-invalid': settingsDialog.error }"/>
               <small class="text-error" v-show="settingsDialog.error">{{ settingsDialog.error }}</small>
@@ -137,6 +170,12 @@
               <label for="quayTokenInput">Quay Token</label>
               <InputText id="quayTokenInput" type="password" v-model="settingsDialog.quayToken" :class="{ 'p-invalid': settingsDialog.error }"/>
               <small style="display: block; margin-top: 4px; color: var(--text-color-secondary, #999);">Required to retrieve Quay.io projects. Generate a token at Quay.io > Go to User settings > <b>CLI configuration</b> Generate encrypted password > <b>Docker Configuration</b> > Then copy the auth single field and paste it here</small>
+            </div>
+            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;"/>
+            <div class="form-field">
+              <label for="changePasswordInput">Change Password</label>
+              <InputText id="changePasswordInput" type="password" v-model="settingsDialog.newPassword" :class="{ 'p-invalid': settingsDialog.error }"/>
+              <small style="display: block; margin-top: 4px; color: var(--text-color-secondary, #999);">Leave empty to keep the current password.</small>
             </div>
             <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;"/>
             <div class="form-field">
@@ -258,7 +297,10 @@ export default {
       projects: [],
       searchQuery: '',
       availableProviders: {},
+      authConfig: { mode: 'password', needsSetup: false },
       loginUrl: `${API_ORIGIN}/api/v1/login?returnTo=${location.origin}`,
+      setupDialog: { password: '', confirm: '', error: '', busy: false },
+      loginDialog: { password: '', error: '', busy: false },
       allProjectTypes: [
         { type: 'github_manual', name: 'Github', group: 'Git Hosting' },
         { type: 'gitlab', name: 'GitLab', group: 'Git Hosting' },
@@ -306,12 +348,15 @@ export default {
         visible: false,
         busy: false,
         error: '',
+        email: '',
         githubToken: '',
         quayToken: '',
+        newPassword: '',
         githubAutoImport: false,
         exportBusy: false,
         importBusy: false,
         importResult: '',
+        testEmailBusy: false,
       },
     };
   },
@@ -450,6 +495,61 @@ export default {
     async onLogout() {
       await superagent.get(`${API_ORIGIN}/api/v1/logout?return_to=${location.origin}`);
       this.user = null;
+      this.quayToken = '';
+      try {
+        const statusResult = await superagent.get(`${API_ORIGIN}/api/v1/status`);
+        this.authConfig.mode = statusResult.body.auth.mode;
+        this.authConfig.needsSetup = statusResult.body.auth.needsSetup;
+      } catch (e) {
+        console.error('Failed to refresh auth config', e);
+      }
+    },
+    async initAfterAuth() {
+      try {
+        const result = await superagent.get(`${API_ORIGIN}/api/v1/profile`);
+        this.user = result.body.user;
+        this.quayToken = result.body.user.quayToken || '';
+        await Promise.all([this.refresh(), this.loadProviders()]);
+      } catch (e) {
+        if (e.status !== 401) console.error(e);
+      }
+    },
+    async onSetupSubmit() {
+      if (this.setupDialog.password.length < 8) {
+        this.setupDialog.error = 'Password must be at least 8 characters';
+        return;
+      }
+      if (this.setupDialog.password !== this.setupDialog.confirm) {
+        this.setupDialog.error = 'Passwords do not match';
+        return;
+      }
+      this.setupDialog.busy = true;
+      this.setupDialog.error = '';
+      try {
+        await superagent.post(`${API_ORIGIN}/api/v1/setup`).send({ password: this.setupDialog.password });
+      } catch (error) {
+        this.setupDialog.error = (error.response && error.response.text) || error.message || 'Setup failed';
+        this.setupDialog.busy = false;
+        return;
+      }
+      this.setupDialog.busy = false;
+      this.setupDialog.password = '';
+      this.setupDialog.confirm = '';
+      await this.initAfterAuth();
+    },
+    async onPasswordLogin() {
+      this.loginDialog.busy = true;
+      this.loginDialog.error = '';
+      try {
+        await superagent.post(`${API_ORIGIN}/api/v1/login`).send({ password: this.loginDialog.password });
+      } catch (error) {
+        this.loginDialog.error = 'Invalid password';
+        this.loginDialog.busy = false;
+        return;
+      }
+      this.loginDialog.busy = false;
+      this.loginDialog.password = '';
+      await this.initAfterAuth();
     },
     async refresh() {
       this.refreshBusy = true;
@@ -572,8 +672,10 @@ export default {
       });
     },
     onShowSettingsDialog() {
+      this.settingsDialog.email = this.user.email || '';
       this.settingsDialog.githubToken = this.user.githubToken || '';
       this.settingsDialog.quayToken = this.quayToken || '';
+      this.settingsDialog.newPassword = '';
       this.settingsDialog.githubAutoImport = this.user.githubAutoImport === true || this.user.githubAutoImport === 1;
       this.settingsDialog.error = '';
       this.settingsDialog.visible = true;
@@ -636,16 +738,26 @@ export default {
         if (this.settingsDialog.githubToken !== (this.user.githubToken || '')) {
           body.githubToken = this.settingsDialog.githubToken;
         }
+        if (this.settingsDialog.email && this.settingsDialog.email !== (this.user.email || '')) {
+          body.email = this.settingsDialog.email;
+        }
         if (this.settingsDialog.quayToken) {
           body.quayToken = this.settingsDialog.quayToken;
         }
         if (this.settingsDialog.githubAutoImport !== currentAutoImport) {
           body.githubAutoImport = this.settingsDialog.githubAutoImport;
         }
+        if (this.settingsDialog.newPassword) {
+          body.password = this.settingsDialog.newPassword;
+        }
         if (Object.keys(body).length > 0) {
           await superagent.post(`${API_ORIGIN}/api/v1/profile`).send(body);
-          this.user.githubAutoImport = this.settingsDialog.githubAutoImport;
+          const result = await superagent.get(`${API_ORIGIN}/api/v1/profile`);
+          this.user = result.body.user;
+          this.quayToken = result.body.user.quayToken || '';
+          await this.loadProviders();
         }
+        this.settingsDialog.newPassword = '';
       } catch (error) {
         if (error.status === 402) {
           document.getElementById('githubTokenInput').focus();
@@ -660,6 +772,18 @@ export default {
 
       this.settingsDialog.busy = false;
       this.settingsDialog.visible = false;
+    },
+    async onSendTestEmail() {
+      this.settingsDialog.testEmailBusy = true;
+      this.settingsDialog.error = '';
+      try {
+        await superagent.post(`${API_ORIGIN}/api/v1/profile/test-email`).send({ email: this.settingsDialog.email });
+      } catch (error) {
+        this.settingsDialog.error = (error.response && error.response.text) || error.message || 'Failed to send test email';
+        this.settingsDialog.testEmailBusy = false;
+        return;
+      }
+      this.settingsDialog.testEmailBusy = false;
     },
     async onExportData() {
       this.settingsDialog.exportBusy = true;
@@ -704,14 +828,14 @@ export default {
     this.busy = true;
 
     try {
-      const result = await superagent.get(`${API_ORIGIN}/api/v1/profile`);
-      this.user = result.body.user;
-      this.quayToken = result.body.user.quayToken || '';
-
-      await Promise.all([this.refresh(), this.loadProviders()]);
+      const statusResult = await superagent.get(`${API_ORIGIN}/api/v1/status`);
+      this.authConfig.mode = statusResult.body.auth.mode;
+      this.authConfig.needsSetup = statusResult.body.auth.needsSetup;
     } catch (e) {
-      if (e.status !== 401) console.error(e);
+      console.error('Failed to load status', e);
     }
+
+    await this.initAfterAuth();
 
     this.busy = false;
   }

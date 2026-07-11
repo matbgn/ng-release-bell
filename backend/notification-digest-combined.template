@@ -1,0 +1,73 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="x-apple-disable-message-reformatting">
+  <title>NG Release Bell Digest</title>
+  <style>
+    html, body {
+      margin: 0 auto !important;
+      padding: 0 !important;
+      height: 100% !important;
+      width: 100% !important;
+      background: white;
+      color: #393939;
+    }
+    * {
+      -ms-text-size-adjust: 100%;
+      -webkit-text-size-adjust: 100%;
+    }
+    a {
+      color: #66b1ff;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #f91880;
+    }
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #1c1c1c;
+        color: #959595;
+      }
+    }
+  </style>
+</head>
+<body>
+<table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="border: 0; padding: 20px; font-family: Helvetica, sans-serif;">
+  <tr>
+    <td align="center" class="header" style="padding: 40px 0 30px 0; background-color: #409eff; border-radius: 4px; font-size: 20px;">
+      <a href="{{ settingsLink }}" style="color: #fff;">NG Release Bell Digest</a>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 40px 30px 10px 30px; font-size: 16px;">
+      <p style="color: #606266; font-size: 14px;">New releases since your last notification:</p>
+      {{#each projects}}
+      <h2 style="color: #303133; margin-top: 24px;">{{ this.name }}</h2>
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top: 10px;">
+        {{#each this.releases}}
+        <tr>
+          <td style="padding: 10px 0; border-bottom: 1px solid #ebeef5;">
+            <a href="{{ this.versionLink }}" style="color: #606266; font-size: 16px;">{{ this.version }}</a>
+            {{#if this.prerelease}}
+              &nbsp; <span style="font-size: 12px; color: #e6a23c;">(prerelease)</span>
+            {{/if}}
+            <br/>
+            <span style="color: #909399; font-size: 12px;">{{ this.date }}</span>
+          </td>
+        </tr>
+        {{/each}}
+      </table>
+      {{/each}}
+    </td>
+  </tr>
+  <tr>
+    <td style="padding: 30px 30px 30px 30px; font-size: 12px;">
+      You received this email because you follow these projects on <a href="{{ settingsLink }}">NG Release Bell</a>.
+      If you'd prefer not to receive these emails, you can <a href="{{ settingsLink }}">change your notification settings</a>.
+    </td>
+  </tr>
+</table>
+</body>
+</html>

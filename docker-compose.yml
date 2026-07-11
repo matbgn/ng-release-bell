@@ -7,6 +7,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - DATA_DIR=/home/nonroot/data
       - DB_PATH=/home/nonroot/data/ng-release-bell.db
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - QUAY_TOKEN=${QUAY_TOKEN:-}

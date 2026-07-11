@@ -8,13 +8,27 @@ var assert = require('assert'),
     path = require('path'),
     fs = require('fs'),
     routes = require('./routes.js'),
+    auth = require('./auth.js'),
     express = require('express');
 
 module.exports = exports = {
     start: start
 };
 
-const baseDir = process.env.DATA_DIR || path.join(__dirname, '../.dev');
+const baseDir = process.env.DATA_DIR || path.join(__dirname, '../data');
+
+function parseCookies(header) {
+    const cookies = {};
+    if (!header) return cookies;
+    header.split(';').forEach(function (c) {
+        const idx = c.indexOf('=');
+        if (idx === -1) return;
+        const k = c.slice(0, idx).trim();
+        const v = c.slice(idx + 1).trim();
+        if (k) cookies[k] = decodeURIComponent(v);
+    });
+    return cookies;
+}
 
 function start(port, callback) {
     assert.strictEqual(typeof port, 'number');
@@ -24,11 +38,18 @@ function start(port, callback) {
 
     var app = express();
 
+    // Public (unauthenticated) endpoints
     router.get ('/api/v1/login', routes.login);
     router.get ('/api/v1/status', routes.status);
+    router.get ('/api/v1/setup', routes.setupGet);
+    router.post('/api/v1/setup', routes.setupPost);
+    router.post('/api/v1/login', routes.loginPassword);
+
+    // Protected endpoints
     router.get ('/api/v1/providers', routes.auth, routes.availableProviders);
     router.get ('/api/v1/profile', routes.auth, routes.profile.get);
     router.post('/api/v1/profile', routes.auth, routes.profile.update);
+    router.post('/api/v1/profile/test-email', routes.auth, routes.profile.testEmail);
     router.get ('/api/v1/projects', routes.auth, routes.projects.list);
     router.post('/api/v1/projects', routes.auth, routes.projects.add);
     router.get ('/api/v1/projects/:projectId', routes.auth, routes.projects.get);
@@ -49,7 +70,7 @@ function start(port, callback) {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    if (process.env.OIDC_ISSUER) {
+    if (auth.OIDC_ENABLED) {
         app.use(oidc.auth({
             issuerBaseURL: process.env.OIDC_ISSUER,
             baseURL: process.env.APP_ORIGIN,
@@ -68,37 +89,16 @@ function start(port, callback) {
             }
         }));
     } else {
-        // mock oidc (login bypass mode for local testing)
-        app.use((req, res, next) => {
-            res.oidc = {
-                login(options) {
-                    res.redirect(options.authorizationParams.redirect_uri);
-                }
-            };
-            req.oidc = {
-                user: {
-                    sub: 'admin',
-                    family_name: 'Admin',
-                    given_name: 'Admin',
-                    locale: 'en-US',
-                    name: 'Admin',
-                    preferred_username: 'admin',
-                    email: 'admin@ngreleasebell.local',
-                    email_verified: true
-                },
-                isAuthenticated() {
-                    return true;
-                }
-            };
-
+        // password mode: parse the signed session cookie (no cookie-parser dependency)
+        app.use(function (req, res, next) {
+            const cookies = parseCookies(req.headers.cookie);
+            const token = cookies[auth.SESSION_COOKIE];
+            req.userId = token ? auth.verifySession(token) : null;
             next();
         });
 
-        app.use('/api/v1/callback', (req, res) => {
-            res.redirect(`${process.env.APP_ORIGIN || 'http://localhost:' + (process.env.VITE_DEV_PORT || process.env.PORT)}/`);
-        });
-
-        app.use('/api/v1/logout', (req, res) => {
+        app.use('/api/v1/logout', function (req, res) {
+            res.clearCookie(auth.SESSION_COOKIE, auth.cookieOptions());
             res.status(200).send({});
         });
     }

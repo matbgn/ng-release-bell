@@ -213,7 +213,8 @@ function usersList() {
 function usersAdd(user) {
     assert.strictEqual(typeof user, 'object');
 
-    db.prepare('INSERT INTO users (id, email, githubToken) VALUES (?, ?, ?)').run(user.id, user.email, user.githubToken);
+    const passwordHash = user.passwordHash || '';
+    db.prepare('INSERT INTO users (id, email, githubToken, passwordHash) VALUES (?, ?, ?, ?)').run(user.id, user.email, user.githubToken, passwordHash);
     return user;
 }
 
@@ -226,7 +227,7 @@ function usersGet(userId) {
     return result;
 }
 
-function usersUpdate(userId, githubToken, email, quayToken, githubAutoImport) {
+function usersUpdate(userId, githubToken, email, quayToken, githubAutoImport, passwordHash) {
     assert.strictEqual(typeof userId, 'string');
     assert.strictEqual(typeof githubToken, 'string');
     assert.strictEqual(typeof email, 'string');
@@ -236,6 +237,7 @@ function usersUpdate(userId, githubToken, email, quayToken, githubAutoImport) {
 
     if (quayToken !== undefined) { fields.push('quayToken=?'); args.push(quayToken); }
     if (githubAutoImport !== undefined) { fields.push('githubAutoImport=?'); args.push(githubAutoImport ? 1 : 0); }
+    if (passwordHash !== undefined) { fields.push('passwordHash=?'); args.push(passwordHash); }
 
     args.push(userId);
     db.prepare(`UPDATE users SET ${fields.join(',')} WHERE id=?`).run(...args);
@@ -254,7 +256,7 @@ function releasesAdd(release) {
     release.createdAt = release.createdAt || 0;
     release.sha = release.sha || '';
 
-    db.prepare('INSERT INTO releases (id, projectId, version, body, notified, prerelease, createdAt, sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    db.prepare('INSERT OR IGNORE INTO releases (id, projectId, version, body, notified, prerelease, createdAt, sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .run(release.id, release.projectId, release.version, release.body, release.notified ? 1 : 0, release.prerelease ? 1 : 0, release.createdAt, release.sha);
 
     return release;

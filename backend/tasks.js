@@ -24,9 +24,25 @@ handlebars.registerHelper('markdown', function(text) {
     return new handlebars.SafeString(text);
 });
 
+const CAN_SEND_EMAIL = (process.env.MAIL_SMTP_SERVER && process.env.MAIL_SMTP_PORT && process.env.MAIL_FROM);
+if (CAN_SEND_EMAIL) {
+    console.log(`Can send emails. Email notifications are sent out as ${process.env.MAIL_FROM}`);
+} else {
+    console.log(`
+No email configuration found. Set the following environment variables:
+    MAIL_SMTP_SERVER
+    MAIL_SMTP_PORT
+    MAIL_SMTP_USERNAME
+    MAIL_SMTP_PASSWORD
+    MAIL_FROM
+    `);
+}
+
 module.exports = exports = {
     run,
-    syncReleasesByProject
+    syncReleasesByProject,
+    sendTestEmail,
+    CAN_SEND_EMAIL
 };
 
 const PROVIDERS = {
@@ -45,22 +61,35 @@ const PROVIDERS = {
 const REGISTRY_PROVIDERS = new Set(['npm', 'pypi', 'dockerhub', 'quay', 'ghcr', 'sourceforge']);
 const MAX_NEW_RELEASES = 50;
 
-const CAN_SEND_EMAIL = (process.env.MAIL_SMTP_SERVER && process.env.MAIL_SMTP_PORT && process.env.MAIL_FROM);
-if (CAN_SEND_EMAIL) {
-    console.log(`Can send emails. Email notifications are sent out as ${process.env.MAIL_FROM}`);
-} else {
-    console.log(`
-No email configuration found. Set the following environment variables:
-    MAIL_SMTP_SERVER
-    MAIL_SMTP_PORT
-    MAIL_SMTP_USERNAME
-    MAIL_SMTP_PASSWORD
-    MAIL_FROM
-    `);
-}
-
 const EMAIL_TEMPLATE = handlebars.compile(fs.readFileSync(path.resolve(__dirname, 'notification.template'), 'utf8'));
 const DIGEST_TEMPLATE = handlebars.compile(fs.readFileSync(path.resolve(__dirname, 'notification-digest.template'), 'utf8'));
+const COMBINED_DIGEST_TEMPLATE = handlebars.compile(fs.readFileSync(path.resolve(__dirname, 'notification-digest-combined.template'), 'utf8'));
+
+function buildTransport() {
+    return nodemailer.createTransport({
+        host: process.env.MAIL_SMTP_SERVER,
+        port: process.env.MAIL_SMTP_PORT,
+        auth: {
+            user: process.env.MAIL_SMTP_USERNAME,
+            pass: process.env.MAIL_SMTP_PASSWORD
+        }
+    });
+}
+
+async function sendTestEmail(user, email) {
+    assert.strictEqual(typeof user, 'object');
+    assert.strictEqual(typeof email, 'string');
+
+    const transport = buildTransport();
+    await transport.sendMail({
+        from: process.env.MAIL_FROM,
+        to: email,
+        subject: 'NG Release Bell - Test Email',
+        text: 'This is a test email from NG Release Bell to validate your email configuration. If you received this, your SMTP settings are working correctly.',
+        html: '<p>This is a test email from <strong>NG Release Bell</strong> to validate your email configuration. If you received this, your SMTP settings are working correctly.</p>'
+    });
+}
+
 let gTasksActive = false;
 let gRetryAt = 0;
 
@@ -96,7 +125,7 @@ async function run() {
         console.error('Failed to send notifications', error);
     }
 
-    const nextRun = gRetryAt ? ((60*1000) + (gRetryAt - Date.now())) : (60 * 60 * 1000);
+    const nextRun = gRetryAt ? ((60*1000) + (gRetryAt - Date.now())) : (5 * 60 * 1000);
 
     gRetryAt = 0;
     gTasksActive = false;
@@ -337,14 +366,7 @@ async function sendNotificationEmail(release, project) {
     if (!project) project = await database.projects.get(release.projectId);
     const user = await database.users.get(project.userId);
 
-    const transport = nodemailer.createTransport({
-        host: process.env.MAIL_SMTP_SERVER,
-        port: process.env.MAIL_SMTP_PORT,
-        auth: {
-            user: process.env.MAIL_SMTP_USERNAME,
-            pass: process.env.MAIL_SMTP_PASSWORD
-        }
-    });
+    const transport = buildTransport();
 
     const versionLink = getVersionLink(project, release.version);
     const settingsLink = process.env.APP_ORIGIN || '';
@@ -361,72 +383,105 @@ async function sendNotificationEmail(release, project) {
     await database.releases.update(release.id, { notified: true });
 }
 
-async function sendDigestEmail(user, project, releases) {
+async function sendCombinedDigestEmail(user, entries) {
     assert.strictEqual(typeof user, 'object');
-    assert.strictEqual(typeof project, 'object');
-    assert.strictEqual(Array.isArray(releases), true);
+    assert.strictEqual(typeof entries, 'object');
+
+    const totalReleases = entries.reduce((n, e) => n + e.pending.length, 0);
 
     if (!CAN_SEND_EMAIL) {
-        console.log(`Would send digest email to ${user.email} for ${project.name} with ${releases.length} releases`);
+        console.log(`Would send hourly digest email to ${user.email} for ${entries.length} project(s) with ${totalReleases} release(s)`);
         return;
     }
 
     const settingsLink = process.env.APP_ORIGIN || '';
 
-    const releaseData = releases.map(function (release) {
-        return {
-            version: release.version,
-            versionLink: getVersionLink(project, release.version),
-            date: release.createdAt ? new Date(release.createdAt).toLocaleDateString() : '',
-            prerelease: release.prerelease
-        };
+    const projectsData = entries.map(function (entry) {
+        const releaseData = entry.pending.map(function (release) {
+            return {
+                version: release.version,
+                versionLink: getVersionLink(entry.project, release.version),
+                date: release.createdAt ? new Date(release.createdAt).toLocaleDateString() : '',
+                prerelease: release.prerelease
+            };
+        });
+        return { name: entry.project.name, releases: releaseData };
     });
 
-    const transport = nodemailer.createTransport({
-        host: process.env.MAIL_SMTP_SERVER,
-        port: process.env.MAIL_SMTP_PORT,
-        auth: {
-            user: process.env.MAIL_SMTP_USERNAME,
-            pass: process.env.MAIL_SMTP_PASSWORD
-        }
-    });
-
+    const transport = buildTransport();
     const mail = {
         from: `${process.env.MAIL_FROM_DISPLAY_NAME ? process.env.MAIL_FROM_DISPLAY_NAME : 'NG Release Bell'} <${process.env.MAIL_FROM}>`,
         to: user.email,
-        subject: `NG Release Bell digest: ${releases.length} new release(s) for ${project.name}`,
-        text: `New releases for ${project.name}: ${releaseData.map(r => r.version).join(', ')}`,
-        html: DIGEST_TEMPLATE({ project, releases: releaseData, settingsLink })
+        subject: `NG Release Bell Digest: ${entries.length} project(s), ${totalReleases} new release(s)`,
+        text: projectsData.map(p => `${p.name}: ${p.releases.map(r => r.version).join(', ')}`).join('\n'),
+        html: COMBINED_DIGEST_TEMPLATE({ projects: projectsData, settingsLink })
     };
 
     await transport.sendMail(mail);
 }
 
 async function sendNotifications() {
+    const now = Date.now();
+    const startOfHour = Math.floor(now / 3600000) * 3600000;
+    const atTopOfHour = (now - startOfHour) < 5 * 60 * 1000;
+
     const projects = await database.projects.listAllWithPendingReleases();
 
+    // Instant: send each pending release individually on every run (every 5 minutes).
     for (const project of projects) {
+        if ((project.emailFrequency || 'instant') !== 'instant') continue;
+
         const pending = await database.releases.listPendingForProject(project.id);
         if (pending.length === 0) continue;
 
-        const freq = project.emailFrequency || 'instant';
-
-        if (freq === 'instant') {
-            for (const release of pending) {
-                try {
-                    await sendNotificationEmail(release, project);
-                } catch (error) {
-                    console.error(`Failed to send notification email for release ${release.projectId}/${release.version}`, error);
-                }
+        for (const release of pending) {
+            try {
+                await sendNotificationEmail(release, project);
+            } catch (error) {
+                console.error(`Failed to send notification email for release ${release.projectId}/${release.version}`, error);
             }
-            continue;
+        }
+    }
+
+    // Hourly: stack all pending releases across the user's projects into a single
+    // digest, sent only at the top of the hour.
+    if (atTopOfHour) {
+        const byUser = new Map();
+        for (const project of projects) {
+            if ((project.emailFrequency || 'instant') !== 'hourly') continue;
+
+            const pending = await database.releases.listPendingForProject(project.id);
+            if (pending.length === 0) continue;
+
+            if (!byUser.has(project.userId)) byUser.set(project.userId, []);
+            byUser.get(project.userId).push({ project, pending });
         }
 
-        const intervals = { hourly: 3600 * 1000, daily: 24 * 3600 * 1000, weekly: 7 * 24 * 3600 * 1000 };
+        for (const [userId, entries] of byUser) {
+            try {
+                const user = await database.users.get(userId);
+                await sendCombinedDigestEmail(user, entries);
+                for (const entry of entries) {
+                    for (const r of entry.pending) await database.releases.update(r.id, { notified: true });
+                    await database.projects.update(entry.project.id, { lastNotifiedAt: Date.now() });
+                }
+            } catch (error) {
+                console.error(`Failed to send hourly digest for user ${userId}`, error);
+            }
+        }
+    }
+
+    // Daily / Weekly: keep the existing interval-based digest behavior.
+    const intervals = { daily: 24 * 3600 * 1000, weekly: 7 * 24 * 3600 * 1000 };
+    for (const project of projects) {
+        const freq = project.emailFrequency || 'instant';
         const interval = intervals[freq];
         if (!interval) continue;
 
-        if (Date.now() - (project.lastNotifiedAt || 0) < interval) continue;
+        const pending = await database.releases.listPendingForProject(project.id);
+        if (pending.length === 0) continue;
+
+        if (now - (project.lastNotifiedAt || 0) < interval) continue;
 
         try {
             const user = await database.users.get(project.userId);

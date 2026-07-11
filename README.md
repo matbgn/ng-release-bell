@@ -59,6 +59,7 @@ cp .env .env
 | Variable | Purpose | Required |
 |----------|---------|----------|
 | `DB_PATH` | SQLite file path | No (default: `./data/ng-release-bell.db`) |
+| `DATA_DIR` | Directory for the session secret + database | No (default: `./data`) |
 | `MAIL_SMTP_SERVER` | SMTP server for email notifications | No (disables emails if empty) |
 | `MAIL_SMTP_PORT` | SMTP port | No |
 | `MAIL_SMTP_USERNAME` | SMTP username | No |
@@ -67,7 +68,21 @@ cp .env .env
 | `APP_ORIGIN` | Public URL of the app | No |
 | `GITHUB_TOKEN` | GitHub API token (for starred repo import + GHCR) | No |
 | `QUAY_TOKEN` | Quay API token | No |
-| `OIDC_ISSUER` | OIDC issuer URL | No (mock login if empty) |
+| `OIDC_ISSUER` | OIDC issuer URL | No (password login fallback if empty) |
+| `OIDC_CLIENT_ID` | OIDC client ID | No (required with `OIDC_ISSUER`) |
+| `OIDC_CLIENT_SECRET` | OIDC client secret | No (required with `OIDC_ISSUER`) |
+| `ADMIN_PASSWORD` | Pre-provisions the admin user on first run (password mode) | No |
+| `ADMIN_EMAIL` | Email for the admin user (default: `admin@ngreleasebell.local`) | No |
+
+### Authentication
+
+- **OIDC (optional)**: set `OIDC_ISSUER`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` together to enable OIDC login with any standards-compliant issuer (custom or hosted). When these are set, the "Login" button starts the OIDC flow.
+- **Password fallback (default)**: when the OIDC variables are empty, NG Release Bell uses a built-in password login — there is no auto-authenticated mock user.
+  - **First-run setup**: on a fresh database with no users, the UI shows a setup wizard to create an admin password.
+  - **Headless / Docker**: set `ADMIN_PASSWORD` (and optionally `ADMIN_EMAIL`) to provision the admin user automatically on first run.
+  - **Change password**: use the Settings dialog to update the admin password.
+
+> **Known limitation**: the session is a stateless signed cookie and cannot be individually revoked server-side; logout clears the client-side cookie. This is acceptable for a single-user self-hosted deployment.
 
 ### Provider Tokens
 

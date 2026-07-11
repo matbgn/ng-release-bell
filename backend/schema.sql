@@ -33,3 +33,5 @@ CREATE TABLE IF NOT EXISTS releases (
     sha TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (projectId) REFERENCES projects(id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS releases_project_version ON releases(projectId, version);

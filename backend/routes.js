@@ -4,6 +4,7 @@ var assert = require('assert'),
     database = require('./database.js'),
     github = require('./github.js'),
     tasks = require('./tasks.js'),
+    authLib = require('./auth.js'),
     { validateVersionFilters } = require('./regex-validator.js'),
     lastMile = require('connect-lastmile'),
     HttpError = lastMile.HttpError,
@@ -13,11 +14,15 @@ module.exports = exports = {
     status,
     auth,
     login,
+    loginPassword,
+    setupGet,
+    setupPost,
     availableProviders,
 
     profile: {
         get: profileGet,
-        update: profileUpdate
+        update: profileUpdate,
+        testEmail: profileTestEmail
     },
 
     projects: {
@@ -49,10 +54,23 @@ function login(req, res) {
     });
 }
 
-function status(req, res, next) {
+async function status(req, res, next) {
     try {
         database.testConnection();
-        next(new HttpSuccess(200, { ok: true, db: true, timestamp: new Date().toISOString() }));
+        let needsSetup = false;
+        if (!authLib.OIDC_ENABLED) {
+            const users = await database.users.list();
+            needsSetup = users.length === 0 || (users.length === 1 && !users[0].passwordHash);
+        }
+        next(new HttpSuccess(200, {
+            ok: true,
+            db: true,
+            timestamp: new Date().toISOString(),
+            auth: {
+                mode: authLib.OIDC_ENABLED ? 'oidc' : 'password',
+                needsSetup: needsSetup
+            }
+        }));
     } catch (e) {
         next(new HttpSuccess(200, { ok: true, db: false, error: e.message }));
     }
@@ -75,28 +93,44 @@ function availableProviders(req, res, next) {
 }
 
 async function auth(req, res, next) {
-    if (!req.oidc.isAuthenticated()) return next(new HttpError(401, 'Unauthorized'));
+    if (authLib.OIDC_ENABLED) {
+        if (!req.oidc.isAuthenticated()) return next(new HttpError(401, 'Unauthorized'));
+
+        let user;
+        try {
+            user = await database.users.get(req.oidc.user.sub);
+        } catch (e) {
+            try {
+                user = await database.users.add({ id: req.oidc.user.sub, email: req.oidc.user.email, githubToken: '' });
+            } catch (e) {
+                console.error('Failed to add user', req.oidc.user, e);
+                return next(new HttpError(500, 'internal error'));
+            }
+        }
+
+        // update email if changed
+        if (user.email !== req.oidc.user.email) {
+            try {
+                await database.users.update(user.id, user.githubToken, req.oidc.user.email);
+                user.email = req.oidc.user.email;
+            } catch (e) {
+                console.error('Failed to update email for user.', user, e);
+            }
+        }
+
+        req.user = user;
+
+        return next();
+    }
+
+    // password mode
+    if (!req.userId) return next(new HttpError(401, 'Unauthorized'));
 
     let user;
     try {
-        user = await database.users.get(req.oidc.user.sub);
+        user = await database.users.get(req.userId);
     } catch (e) {
-        try {
-            user = await database.users.add({ id: req.oidc.user.sub, email: req.oidc.user.email, githubToken: '' });
-        } catch (e) {
-            console.error('Failed to add user', req.user.oidc.user, e);
-            return next(new HttpError(500, 'internal error'));
-        }
-    }
-
-    // update email if changed
-    if (user.email !== req.oidc.user.email) {
-        try {
-            await database.users.update(user.id, user.githubToken, req.oidc.user.email);
-            user.email = req.oidc.user.email;
-        } catch (e) {
-            console.error('Failed to update email for user.', user, e);
-        }
+        return next(new HttpError(401, 'Unauthorized'));
     }
 
     req.user = user;
@@ -104,10 +138,58 @@ async function auth(req, res, next) {
     next();
 }
 
+async function loginPassword(req, res, next) {
+    const password = req.body.password;
+    if (!password) return next(new HttpError(400, 'password is required'));
+
+    const users = await database.users.list();
+    if (users.length === 0) return next(new HttpError(401, 'Unauthorized'));
+
+    const user = users[0];
+    if (!authLib.verifyPassword(password, user.passwordHash)) return next(new HttpError(401, 'Unauthorized'));
+
+    res.cookie(authLib.SESSION_COOKIE, authLib.signSession(user.id), authLib.cookieOptions());
+    next(new HttpSuccess(200, {}));
+}
+
+async function setupGet(req, res, next) {
+    const needsSetup = (await database.users.list()).length === 0;
+    next(new HttpSuccess(200, { needsSetup }));
+}
+
+async function setupPost(req, res, next) {
+    const password = req.body.password;
+    if (!password || typeof password !== 'string' || password.length < 8) {
+        return next(new HttpError(400, 'Password must be at least 8 characters'));
+    }
+
+    const users = await database.users.list();
+    const noUsers = users.length === 0;
+    const orphanAdmin = users.length === 1 && !users[0].passwordHash;
+    if (!noUsers && !orphanAdmin) return next(new HttpError(403, 'Setup already complete'));
+
+    const email = process.env.ADMIN_EMAIL || 'admin@ngreleasebell.local';
+    let userId;
+    if (noUsers) {
+        const user = await database.users.add({ id: 'admin', email: email, githubToken: '', passwordHash: authLib.hashPassword(password) });
+        userId = user.id;
+    } else {
+        // adopt the existing (passwordless) admin, e.g. one created by a prior OIDC session
+        const existing = users[0];
+        await database.users.update(existing.id, existing.githubToken, email, existing.quayToken, existing.githubAutoImport, authLib.hashPassword(password));
+        userId = existing.id;
+    }
+
+    res.cookie(authLib.SESSION_COOKIE, authLib.signSession(userId), authLib.cookieOptions());
+    next(new HttpSuccess(200, {}));
+}
+
 function profileGet(req, res, next) {
     assert.strictEqual(typeof req.user, 'object');
 
-    next(new HttpSuccess(200, { user: req.user }));
+    const safeUser = Object.assign({}, req.user);
+    delete safeUser.passwordHash;
+    next(new HttpSuccess(200, { user: safeUser }));
 }
 
 async function profileUpdate(req, res, next) {
@@ -116,6 +198,7 @@ async function profileUpdate(req, res, next) {
     const githubToken = req.body.githubToken !== undefined ? req.body.githubToken : req.user.githubToken;
     const quayToken = req.body.quayToken !== undefined ? req.body.quayToken : (req.user.quayToken || '');
     const githubAutoImport = req.body.githubAutoImport !== undefined ? req.body.githubAutoImport : req.user.githubAutoImport;
+    const email = req.body.email !== undefined ? req.body.email : req.user.email;
 
     if (githubToken !== req.user.githubToken) {
         try {
@@ -125,18 +208,38 @@ async function profileUpdate(req, res, next) {
         }
     }
 
+    const password = req.body.password;
+    const passwordHash = (password && typeof password === 'string' && password.length > 0) ? authLib.hashPassword(password) : undefined;
+
     try {
-        await database.users.update(req.user.id, githubToken, req.user.email, quayToken, githubAutoImport);
+        await database.users.update(req.user.id, githubToken, email, quayToken, githubAutoImport, passwordHash);
     } catch (error) {
         return next(new HttpError(500, error));
     }
     req.user.githubToken = githubToken;
     req.user.quayToken = quayToken;
     req.user.githubAutoImport = githubAutoImport;
+    req.user.email = email;
 
     next(new HttpSuccess(202, {}));
 
     if (githubToken && githubToken !== req.user.githubToken) tasks.run();
+}
+
+async function profileTestEmail(req, res, next) {
+    assert.strictEqual(typeof req.user, 'object');
+
+    const email = (req.body.email !== undefined && req.body.email) ? req.body.email : req.user.email;
+    if (!email) return next(new HttpError(400, 'No email address configured. Enter your email in the settings first.'));
+    if (!tasks.CAN_SEND_EMAIL) return next(new HttpError(400, 'Email is not configured on the server. Check the MAIL_* environment variables.'));
+
+    try {
+        await tasks.sendTestEmail(req.user, email);
+    } catch (error) {
+        return next(new HttpError(500, error.message || 'Failed to send test email'));
+    }
+
+    next(new HttpSuccess(202, {}));
 }
 
 async function projectsList(req, res, next) {
