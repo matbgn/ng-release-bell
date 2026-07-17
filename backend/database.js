@@ -109,27 +109,14 @@ function projectsList(userId) {
 
     result.forEach(projectPostprocess);
 
-    const { passesVersionFilters } = require('./regex-validator.js');
-    const NON_SEMVER_TAGS = ['latest', 'stable', 'develop', 'main', 'master', 'edge', 'nightly'];
+    const { releasePassesDisplayFilters } = require('./regex-validator.js');
     for (const project of result) {
         const releases = db.prepare('SELECT version, createdAt, prerelease FROM releases WHERE projectId=? ORDER BY createdAt DESC').all(project.id);
 
-        const filtered = releases.filter(r => {
-            if (NON_SEMVER_TAGS.includes(r.version.toLowerCase())) return false;
-            if (!passesVersionFilters(r.version, project.versionFilters)) return false;
-            if (project.excludePrereleases && r.prerelease) return false;
-            return true;
-        });
+        const filtered = releases.filter(r => releasePassesDisplayFilters(r, project));
 
-        if (filtered.length > 0) {
-            project.version = filtered[0].version;
-            project.createdAt = filtered[0].createdAt;
-        } else if (project.version) {
-            if (NON_SEMVER_TAGS.includes(project.version.toLowerCase())) {
-                project.version = null;
-                project.createdAt = null;
-            }
-        }
+        project.version = filtered.length > 0 ? filtered[0].version : null;
+        project.createdAt = filtered.length > 0 ? filtered[0].createdAt : null;
     }
 
     return result;
@@ -149,6 +136,17 @@ function projectsListByType(userId, type) {
     `).all(userId, type);
 
     result.forEach(projectPostprocess);
+
+    const { releasePassesDisplayFilters } = require('./regex-validator.js');
+    for (const project of result) {
+        const releases = db.prepare('SELECT version, createdAt, prerelease FROM releases WHERE projectId=? ORDER BY createdAt DESC').all(project.id);
+
+        const filtered = releases.filter(r => releasePassesDisplayFilters(r, project));
+
+        project.version = filtered.length > 0 ? filtered[0].version : null;
+        project.createdAt = filtered.length > 0 ? filtered[0].createdAt : null;
+    }
+
     return result;
 }
 

@@ -52,4 +52,19 @@ function passesVersionFilters(version, versionFilters) {
     return true;
 }
 
-module.exports = { validateRegex, validateVersionFilters, passesVersionFilters };
+const NON_SEMVER_TAGS = ['latest', 'stable', 'develop', 'main', 'master', 'edge', 'nightly'];
+
+function releasePassesDisplayFilters(release, project) {
+    if (NON_SEMVER_TAGS.includes(release.version.toLowerCase())) return false;
+    if (!passesVersionFilters(release.version, project.versionFilters)) return false;
+    if (project.excludePrereleases && release.prerelease) return false;
+    return true;
+}
+
+module.exports = {
+    validateRegex,
+    validateVersionFilters,
+    passesVersionFilters,
+    releasePassesDisplayFilters,
+    NON_SEMVER_TAGS
+};

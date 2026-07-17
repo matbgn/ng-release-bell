@@ -1,6 +1,6 @@
 {
   "name": "ng-release-bell",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "NG Release Bell - Track releases across multiple providers (GitHub, GitLab, Gitea, NPM, PyPI, Docker Hub, Quay, GHCR, SourceForge)",
   "main": "index.js",
   "engines": {
@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test \"backend/test/**/*.test.js\""
   },
   "author": "",
   "license": "MIT",
