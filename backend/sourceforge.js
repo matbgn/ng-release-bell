@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     getReleases
@@ -54,14 +55,14 @@ async function getReleases(token, project) {
 
     let result;
     try {
-        result = await superagent
+        result = await withTimeout(superagent
             .get(`https://sourceforge.net/projects/${encodeURIComponent(project.name)}/rss`)
             .buffer(true)
             .parse((res, cb) => {
                 let data = '';
                 res.on('data', chunk => { data += chunk; });
                 res.on('end', () => cb(null, data));
-            });
+            }));
     } catch (error) {
         if (error && error.status === 404) return [];
         console.error('SourceForge: failed to fetch RSS', error.message);

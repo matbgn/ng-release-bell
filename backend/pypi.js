@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     getReleases
@@ -14,7 +15,7 @@ async function getReleases(token, project) {
 
     let result;
     try {
-        result = await superagent.get(`https://pypi.org/pypi/${encodeURIComponent(project.name)}/json`);
+        result = await withTimeout(superagent.get(`https://pypi.org/pypi/${encodeURIComponent(project.name)}/json`));
     } catch (error) {
         if (error && error.status === 404) return [];
         throw error;

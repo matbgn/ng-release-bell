@@ -18,6 +18,9 @@ function buildOctokit(token) {
     const octokit = new CustomOctokit({
         auth: token,
         userAgent: 'ng-release-bell',
+        request: {
+            timeout: 30000
+        },
         throttle: {
             onRateLimit: (retryAfter, options) => {
                 console.log(`Request quota exhausted for request ${options.method} ${options.url}`);

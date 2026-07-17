@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     getReleases
@@ -19,7 +20,7 @@ async function getReleases(token, project) {
 
     let result;
     try {
-        result = await superagent.get(`https://registry.npmjs.org/${encodeURIComponent(project.name)}`).set(headers);
+        result = await withTimeout(superagent.get(`https://registry.npmjs.org/${encodeURIComponent(project.name)}`)).set(headers);
     } catch (error) {
         if (error && error.status === 404) return [];
         throw error;

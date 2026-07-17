@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     verifyToken,
@@ -32,7 +33,7 @@ async function getReleases(token, project) {
     // https://docs.gitlab.com/ee/api/tags.html
     let result;
     try {
-        result = await superagent.get(`${project.origin}/api/v4/projects/${encodeURIComponent(project.name)}/repository/tags?order_by=updated&sort=desc`);
+        result = await withTimeout(superagent.get(`${project.origin}/api/v4/projects/${encodeURIComponent(project.name)}/repository/tags?order_by=updated&sort=desc`));
     } catch (error) {
         if (error && error.status === 404) return [];
         throw error;
@@ -68,7 +69,7 @@ async function getCommit(token, project, sha) {
     assert.strictEqual(typeof project, 'object');
     assert.strictEqual(typeof sha, 'string');
 
-    const result = await superagent.get(`${project.origin}/api/v4/projects/${encodeURIComponent(project.name)}/repository/commits/${sha}`);
+    const result = await withTimeout(superagent.get(`${project.origin}/api/v4/projects/${encodeURIComponent(project.name)}/repository/commits/${sha}`));
 
     return {
         createdAt: result.body.committed_date,

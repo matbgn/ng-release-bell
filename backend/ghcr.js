@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     getReleases
@@ -53,10 +54,10 @@ async function fetchPackageVersions(scope, owner, packageName, headers, projectI
     while (hasMore && releases.length < 500) {
         let result;
         try {
-            result = await superagent
+            result = await withTimeout(superagent
                 .get(`${GITHUB_API}/${scope}/${owner}/packages/container/${encodeURIComponent(packageName)}/versions`)
                 .query({ per_page: 100, page, state: 'active' })
-                .set(headers)
+                .set(headers))
                 .ok(res => res.status < 400);
         } catch (error) {
             if (error && error.status === 404) return [];

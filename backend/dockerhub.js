@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     getReleases
@@ -18,7 +19,7 @@ async function getReleases(token, project) {
     while (url && allTags.length < MAX_TAGS) {
         let result;
         try {
-            result = await superagent.get(url);
+            result = await withTimeout(superagent.get(url));
         } catch (error) {
             if (error && error.status === 404) return [];
             throw error;

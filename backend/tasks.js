@@ -337,7 +337,11 @@ async function syncReleasesByUser(user) {
     shuffleArray(projects);
 
     for (let project of projects) {
-        await syncReleasesByProject(user, project);
+        try {
+            await syncReleasesByProject(user, project);
+        } catch (error) {
+            console.error(`Failed to sync releases for ${project.name} (${project.type}). Continuing...`, error);
+        }
     }
 }
 

@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     getReleases
@@ -20,8 +21,8 @@ async function getReleases(token, project) {
 
     let result;
     try {
-        result = await superagent
-            .get(`https://quay.io/api/v1/repository/${project.name}/tag/?limit=${MAX_TAGS}&only_active_tags=true`)
+        result = await withTimeout(superagent
+            .get(`https://quay.io/api/v1/repository/${project.name}/tag/?limit=${MAX_TAGS}&only_active_tags=true`))
             .set('Authorization', `Bearer ${quayToken}`);
     } catch (error) {
         if (error && error.status === 404) return [];
