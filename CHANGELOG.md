@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.0.1 (2026-07-17)
+
+### Bug Fixes
+
+- **common:** add HTTP request timeouts to prevent hanging syncs (39bcbfa)
+- **justfile:** use docker image var, fix latest tag (c671269)
+
+---
+
 ## v2.0.0 (2026-07-11)
 
 ### Features
@@ -42,9 +51,5 @@
 ---
 
 ## v1.9.0-1 (2023-09-26)
-
----
-
-## v1.9.0 (2023-09-26)
 
 ---
