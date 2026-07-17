@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('assert'),
-    superagent = require('superagent');
+    superagent = require('superagent'),
+    { withTimeout } = require('./http-common.js');
 
 module.exports = exports = {
     getReleases,
@@ -18,7 +19,7 @@ async function getReleases(token, project) {
 
     let result;
     try {
-        result = await superagent.get(`${project.origin}/api/v1/repos/${owner}/${repo}/tags?limit=${MAX_TAGS}`);
+        result = await withTimeout(superagent.get(`${project.origin}/api/v1/repos/${owner}/${repo}/tags?limit=${MAX_TAGS}`));
     } catch (error) {
         if (error && error.status === 404) return [];
         throw error;
@@ -48,7 +49,7 @@ async function getCommit(token, project, sha) {
 
     const [ owner, repo ] = project.name.split('/');
 
-    const result = await superagent.get(`${project.origin}/api/v1/repos/${owner}/${repo}/git/commits/${sha}`);
+    const result = await withTimeout(superagent.get(`${project.origin}/api/v1/repos/${owner}/${repo}/git/commits/${sha}`));
 
     return {
         createdAt: result.body.created || (result.body.commit && result.body.commit.committer && result.body.commit.committer.date),
